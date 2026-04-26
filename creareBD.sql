@@ -9,6 +9,7 @@ DROP TABLE IF EXISTS Utilizator_Afectiune;
 DROP TABLE IF EXISTS Biomarkeri;
 DROP TABLE IF EXISTS Afectiuni;
 DROP TABLE IF EXISTS Utilizatori;
+DROP TABLE IF EXISTS Reguli_Diagnostic;
 
 -- Tabel Utilizatori
 CREATE TABLE Utilizatori (
@@ -30,7 +31,7 @@ CREATE TABLE Afectiuni (
 CREATE TABLE Utilizator_Afectiune (
     id_utilizator INTEGER NOT NULL,
     nume_afectiune TEXT NOT NULL,
-    data_diagnostic TEXT,
+    data_diagnostic TEXT NOT NULL,
     status TEXT, -- ex: 'Activ', 'Remisie'
     preexistent INTEGER NOT NULL DEFAULT 0 CHECK (preexistent IN (0, 1)),
     PRIMARY KEY (id_utilizator, nume_afectiune),
@@ -41,20 +42,20 @@ CREATE TABLE Utilizator_Afectiune (
 -- Tabel Biomarkeri (Catalogul de Referință)
 CREATE TABLE Biomarkeri (
     id_biomarker INTEGER PRIMARY KEY AUTOINCREMENT,
-    nume_biomarker TEXT,
-    sex TEXT CHECK (sex IN ('M', 'F', 'I')), -- I = irelevant
-    unitate_masura TEXT,
-    valoare_min_ref REAL,
-    valoare_max_ref REAL,
+    nume_biomarker TEXT NOT NULL,
+    sex TEXT CHECK (sex IN ('M', 'F', 'I')) NOT NULL, -- I = irelevant
+    unitate_masura TEXT NOT NULL,
+    valoare_min_ref REAL NOT NULL,
+    valoare_max_ref REAL NOT NULL,
     UNIQUE(nume_biomarker, sex) -- nu pot exista mai multe perechi de tipul biomarker - sex
 );
 
 CREATE TABLE Reguli_Diagnostic (
-    id_regula INTEGER PRIMARY KEY AUTOINCREMENT,
     nume_afectiune TEXT NOT NULL,
     id_biomarker INTEGER NOT NULL,
-    directie_deviatie TEXT CHECK (directie_deviatie IN ('SCAZUT', 'CRESCUT')),
+    directie_deviatie TEXT CHECK (directie_deviatie IN ('SCAZUT', 'CRESCUT')) NOT NULL,
     pondere REAL DEFAULT 1.0, -- Cât de important e acest biomarker pentru boala respectivă
+    PRIMARY KEY (nume_afectiune, id_biomarker),
     FOREIGN KEY (nume_afectiune) REFERENCES Afectiuni(nume_afectiune),
     FOREIGN KEY (id_biomarker) REFERENCES Biomarkeri(id_biomarker)
 );
@@ -70,13 +71,12 @@ CREATE TABLE Analize (
 
 -- Tabel Valori_Masurate
 CREATE TABLE Valori_Masurate (
-    id_valoare_mas INTEGER PRIMARY KEY AUTOINCREMENT,
     id_analiza INTEGER NOT NULL,
     id_biomarker INTEGER NOT NULL,
     valoare_masurata REAL NOT NULL,
+    PRIMARY KEY (id_analiza, id_biomarker),
     FOREIGN KEY (id_analiza) REFERENCES Analize(id_sesiune) ON DELETE CASCADE,
-    FOREIGN KEY (id_biomarker) REFERENCES Biomarkeri(id_biomarker) ON DELETE RESTRICT,
-    UNIQUE(id_analiza, id_biomarker) --un biomarker nu poate sa apara de doua ori pe o analiza
+    FOREIGN KEY (id_biomarker) REFERENCES Biomarkeri(id_biomarker) ON DELETE RESTRICT
 );
 
 -- Indexare pentru rapiditatea interogărilor
