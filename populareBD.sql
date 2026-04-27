@@ -1,4 +1,3 @@
--- Tabel Biomarkeri
 INSERT INTO Biomarkeri (nume_biomarker, sex, unitate_masura, valoare_min_ref, valoare_max_ref) VALUES
 -- Hematologie
 ('Hemoglobină', 'M', 'g/dL', 13.5, 17.5),
@@ -134,3 +133,46 @@ INSERT INTO Reguli_Diagnostic (nume_afectiune, id_biomarker, directie_deviatie, 
 ('Imunodeficiență Umorală', (SELECT id_biomarker FROM Biomarkeri WHERE nume_biomarker='IgA'), 'SCAZUT', 0.8),
 ('Imunodeficiență Umorală', (SELECT id_biomarker FROM Biomarkeri WHERE nume_biomarker='IgM'), 'SCAZUT', 0.8),
 ('Gamapatie Monoclonală', (SELECT id_biomarker FROM Biomarkeri WHERE nume_biomarker='Gama-globuline'), 'CRESCUT', 1.0);
+
+
+INSERT INTO Utilizatori (nume, prenume, email, sex, data_nasterii) VALUES
+    ('Popescu', 'Ion', 'ion.popescu@gmail.com', 'M', '1985-05-20'),
+    ('Ionescu', 'Maria', 'maria.ionescu@gmail.com', 'F', '1992-03-15'),
+    ('Dumitru', 'Andrei', 'andrei.d@gmail.com', 'M', '1978-11-02'),
+    ('Constantin', 'Elena', 'elena.c@gmail.com', 'F', '2000-07-25'),
+    ('Radu', 'Mihai', 'mihai.radu@gmail.com', 'M', '1995-01-10');
+
+INSERT INTO Analize (id_utilizator, data_recoltare, tip_sesiune) VALUES
+    (1, '2024-01-15', 'Sânge'),
+    (1, '2024-01-15', 'Sânge'),
+
+    (2, '2024-02-10', 'Sânge'),
+    (2, '2024-02-12', 'Sânge'),
+
+    (3, '2024-03-05', 'Sânge');
+
+INSERT INTO Valori_Masurate (id_analiza, id_biomarker, valoare_masurata) VALUES
+    -- Sesiunea 1 (Utilizator 1 - Masculin): Hemoglobină, Glicemie, TSH
+    (1, 1, 14.2),  -- Hemoglobină M (Normal)
+    (1, 8, 115.0), -- Glicemie I (Peste limita de 100) -> ALERTĂ
+    (1, 26, 3.1),  -- TSH I (Normal)
+
+    -- Sesiunea 2 (Utilizator 1 - Masculin): Creatinină, LDL, VSH
+    (2, 9, 1.5),   -- Creatinină M (Peste limita de 1.3) -> ALERTĂ
+    (2, 16, 110.0),-- LDL I (Normal)
+    (2, 6, 8.0),   -- VSH M (Normal)
+
+    -- Sesiunea 3 (Utilizator 2 - Feminin): Hemoglobină, Calciu seric, TGP
+    (3, 2, 11.5),  -- Hemoglobină F (Sub limita de 12) -> ALERTĂ
+    (3, 24, 9.2),  -- Calciu seric I (Normal)
+    (3, 11, 35.0), -- TGP I (Normal)
+
+    -- Sesiunea 4 (Utilizator 2 - Feminin): Colesterol Total, HDL, Trigliceride
+    (4, 13, 210.0),-- Colesterol Total I (Peste limita de 200) -> ALERTĂ
+    (4, 15, 55.0), -- HDL F (Normal)
+    (4, 17, 140.0),-- Trigliceride I (Normal)
+
+    -- Sesiunea 5 (Utilizator 3 - Masculin): Hematocrit, Acid Uric, VSH
+    (5, 3, 45.0),  -- Hematocrit M (Normal)
+    (5, 18, 7.5),  -- Acid Uric M (Peste limita de 7) -> ALERTĂ
+    (5, 6, 25.0);  -- VSH M (Peste limita de 15) -> ALERTĂ
