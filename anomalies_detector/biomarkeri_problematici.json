@@ -1,0 +1,78 @@
+[
+    {
+        "id_utilizator": 1,
+        "analize_problematice": [
+            {
+                "id_sesiune": 1,
+                "biomarkeri_alerta": [
+                    {
+                        "nume": "Glicemie",
+                        "valoare_masurata": 115.0,
+                        "interval_referinta": "70.0 - 100.0",
+                        "deviere": "15.0%"
+                    }
+                ]
+            },
+            {
+                "id_sesiune": 2,
+                "biomarkeri_alerta": [
+                    {
+                        "nume": "Creatinină",
+                        "valoare_masurata": 1.5,
+                        "interval_referinta": "0.7 - 1.3",
+                        "deviere": "15.38%"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id_utilizator": 2,
+        "analize_problematice": [
+            {
+                "id_sesiune": 3,
+                "biomarkeri_alerta": [
+                    {
+                        "nume": "Hemoglobină",
+                        "valoare_masurata": 11.5,
+                        "interval_referinta": "12.0 - 15.5",
+                        "deviere": "4.17%"
+                    }
+                ]
+            },
+            {
+                "id_sesiune": 4,
+                "biomarkeri_alerta": [
+                    {
+                        "nume": "Colesterol Total",
+                        "valoare_masurata": 210.0,
+                        "interval_referinta": "120.0 - 200.0",
+                        "deviere": "5.0%"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id_utilizator": 3,
+        "analize_problematice": [
+            {
+                "id_sesiune": 5,
+                "biomarkeri_alerta": [
+                    {
+                        "nume": "Acid Uric seric",
+                        "valoare_masurata": 7.5,
+                        "interval_referinta": "3.4 - 7.0",
+                        "deviere": "7.14%"
+                    },
+                    {
+                        "nume": "VSH",
+                        "valoare_masurata": 25.0,
+                        "interval_referinta": "0.0 - 15.0",
+                        "deviere": "66.67%"
+                    }
+                ]
+            }
+        ]
+    }
+]
