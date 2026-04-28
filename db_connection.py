@@ -17,7 +17,7 @@ class DatabaseConnection:
         db_path = os.path.join(base_dir, 'database', 'MEDICODE')
         
         try:
-            self._conn = sqlite3.connect(db_path)
+            self._conn = sqlite3.connect(db_path, check_same_thread=False)
             # Activam suportul pentru Foreign Keys (optional, dar recomandat)
             self._conn.execute("PRAGMA foreign_keys = ON;")
             print("Conexiune stabilită cu succes către MEDICODE.")
