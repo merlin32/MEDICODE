@@ -2,3 +2,4 @@ database/
 .venv/
 __pycache__/
 temp/
+biomarkeri_problematici.json
