@@ -19,9 +19,9 @@ CREATE TABLE Utilizatori (
     prenume TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL CHECK (email LIKE '%@%'),
     sex TEXT NOT NULL CHECK (sex IN ('F', 'M')),
-    data_nasterii DATE NOT NULL
+    data_nasterii DATE NOT NULL,
+    parola_hash TEXT NOT NULL
 );
-
 -- Tabel Afectiuni (Catalogul General)
 CREATE TABLE Afectiuni (
     nume_afectiune TEXT PRIMARY KEY,

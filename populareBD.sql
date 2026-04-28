@@ -136,12 +136,12 @@ INSERT INTO Reguli_Diagnostic (nume_afectiune, id_biomarker, directie_deviatie, 
 
 
 INSERT INTO Utilizatori (cnp, 
-nume, prenume, email, sex, data_nasterii) VALUES
-    ('1850520123456', 'Popescu', 'Ion', 'ion.popescu@gmail.com', 'M', '1985-05-20'),
-    ('2920315678901', 'Ionescu', 'Maria', 'maria.ionescu@gmail.com', 'F', '1992-03-15'),
-    ('1781102234567', 'Dumitru', 'Andrei', 'andrei.d@gmail.com', 'M', '1978-11-02'),
-    ('2000725345678', 'Constantin', 'Elena', 'elena.c@gmail.com', 'F', '2000-07-25'),
-    ('1950110456789', 'Radu', 'Mihai', 'mihai.radu@gmail.com', 'M', '1995-01-10');
+nume, prenume, email, sex, data_nasterii, parola_hash) VALUES
+    ('1850520123456', 'Popescu', 'Ion', 'ion.popescu@gmail.com', 'M', '1985-05-20','test1'),
+    ('2920315678901', 'Ionescu', 'Maria', 'maria.ionescu@gmail.com', 'F', '1992-03-15','test2'),
+    ('1781102234567', 'Dumitru', 'Andrei', 'andrei.d@gmail.com', 'M', '1978-11-02','test3'),
+    ('2000725345678', 'Constantin', 'Elena', 'elena.c@gmail.com', 'F', '2000-07-25','test4'),
+    ('1950110456789', 'Radu', 'Mihai', 'mihai.radu@gmail.com', 'M', '1995-01-10','test5');
 
 INSERT INTO Analize (id_utilizator, data_recoltare, tip_sesiune) VALUES
     (1, '2024-01-15', 'Sânge'),
