@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS Reguli_Diagnostic;
 -- Tabel Utilizatori
 CREATE TABLE Utilizatori (
     id_utilizator INTEGER PRIMARY KEY AUTOINCREMENT,
+    cnp TEXT UNIQUE NOT NULL CHECK (length(cnp) = 13 AND cnp NOT GLOB '*[^0-9]*'),
     nume TEXT NOT NULL,
     prenume TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL CHECK (email LIKE '%@%'),
