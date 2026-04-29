@@ -14,7 +14,6 @@ from demo_paddleocr import extrage_text_cu_paddle, extrage_date_structurate
 from inserare_BD import proceseaza_si_salveaza_buletin
 from anomalies_detector.anomalies_detector import genereaza_raport_json
 
-
 st.set_page_config(page_title="MEDICODE", page_icon="🏥", layout="centered")
 
 PBKDF2_ITERATIONS = 120_000
@@ -29,14 +28,18 @@ def get_db_connection():
 
 def ensure_auth_schema():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    db_folder = os.path.join(base_dir, 'database')
-    db_path = os.path.join(base_dir, 'database', 'MEDICODE')
-    
+    db_folder = os.path.join(base_dir, "database")
+    db_path = os.path.join(base_dir, "database", "MEDICODE")
+
+    os.makedirs(db_folder, exist_ok=True)
+
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    
+
     try:
-        existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(Utilizatori)").fetchall()}
+        existing_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(Utilizatori)").fetchall()
+        }
 
         if "parola_hash" not in existing_columns:
             conn.execute("ALTER TABLE Utilizatori ADD COLUMN parola_hash TEXT")
@@ -97,10 +100,16 @@ def register_user(form_data):
 
     if existing_user:
         if existing_user["cnp"] != form_data["cnp"]:
-            return False, "Există deja un cont cu acest email, dar CNP-ul introdus nu corespunde."
+            return (
+                False,
+                "Există deja un cont cu acest email, dar CNP-ul introdus nu corespunde.",
+            )
 
         if existing_user["parola_hash"]:
-            return False, "Acest utilizator are deja un cont activ. Te poți conecta direct."
+            return (
+                False,
+                "Acest utilizator are deja un cont activ. Te poți conecta direct.",
+            )
 
         conn.execute(
             """
@@ -169,87 +178,116 @@ def logout():
 def render_dashboard():
     current_user = st.session_state.current_user or {}
 
-    st.sidebar.success(f"Conectat ca {current_user.get('prenume', '')} {current_user.get('nume', '')}".strip())
+    st.sidebar.success(
+        f"Conectat ca {current_user.get('prenume', '')} {current_user.get('nume', '')}".strip()
+    )
     if st.sidebar.button("Deconectare"):
         logout()
 
     st.title("🏥 MEDICODE")
     st.subheader("AI Diagnostic & Tracking Dashboard")
 
-    st.warning("⚠️ **DISCLAIMER:** Aplicația oferă informații educaționale bazate pe AI. Nu înlocuiește sfatul medicului.")
+    st.warning(
+        "⚠️ **DISCLAIMER:** Aplicația oferă informații educaționale bazate pe AI. Nu înlocuiește sfatul medicului."
+    )
 
     tab1, tab2 = st.tabs(["📄 1. Încărcare & Evaluare", "📈 2. Istoric Medical"])
 
     with tab1:
         st.markdown("### Încarcă buletinul de analize")
-        data_recoltare = st.date_input("Data Recoltării (cum apare pe foaie):", datetime.date.today())
-        
+        data_recoltare = st.date_input(
+            "Data Recoltării (cum apare pe foaie):", datetime.date.today()
+        )
+
         fisiere_incarcate = st.file_uploader(
-            "Formate acceptate: PDF, PNG, JPG (Puteți selecta mai multe pagini)", 
-            type=["pdf", "png", "jpg"], 
-            accept_multiple_files=True
+            "Formate acceptate: PDF, PNG, JPG (Puteți selecta mai multe pagini)",
+            type=["pdf", "png", "jpg"],
+            accept_multiple_files=True,
         )
 
         if fisiere_incarcate:
             if st.button("🚀 Începe analiza", type="primary"):
-                with st.spinner("Procesăm documentele, evaluăm medical și actualizăm baza de date..."):
+                with st.spinner(
+                    "Procesăm documentele, evaluăm medical și actualizăm baza de date..."
+                ):
                     try:
                         toate_datele_ocr = []
-                        
+
                         # 1. OCR
                         for fisier in fisiere_incarcate:
-                            extensie = fisier.name.split('.')[-1]
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{extensie}") as tmp:
+                            extensie = fisier.name.split(".")[-1]
+                            with tempfile.NamedTemporaryFile(
+                                delete=False, suffix=f".{extensie}"
+                            ) as tmp:
                                 tmp.write(fisier.getvalue())
                                 tmp_path = tmp.name
-                            
+
                             text_brut = extrage_text_cu_paddle(tmp_path)
                             date_structurate = extrage_date_structurate(text_brut)
                             toate_datele_ocr.extend(date_structurate)
                             os.remove(tmp_path)
 
                         # 2. Salvare BD & Obținere Evaluare Culori
-                        id_user_curent = current_user['id_utilizator']
-                        sex_user_curent = current_user['sex']
+                        id_user_curent = current_user["id_utilizator"]
+                        sex_user_curent = current_user["sex"]
                         data_rec_str = data_recoltare.strftime("%Y-%m-%d")
-                        
-                        rezultate_salvate = proceseaza_si_salveaza_buletin(id_user_curent, sex_user_curent, data_rec_str, toate_datele_ocr)
+
+                        rezultate_salvate = proceseaza_si_salveaza_buletin(
+                            id_user_curent,
+                            sex_user_curent,
+                            data_rec_str,
+                            toate_datele_ocr,
+                        )
 
                         # 3. Rulare script anomalies_detector pentru a genera raportul JSON cu alertele globale
                         genereaza_raport_json()
 
                         # 4. Afișarea în interfață cu Roșu/Galben/Verde
-                        st.success(f"✅ Analiză finalizată! Am extras și salvat {len(rezultate_salvate)} rezultate medicale.")
+                        st.success(
+                            f"✅ Analiză finalizată! Am extras și salvat {len(rezultate_salvate)} rezultate medicale."
+                        )
                         st.markdown("---")
                         st.markdown("### 📊 Rezultatele Analizei Curente")
 
                         if len(rezultate_salvate) == 0:
-                            st.info("Niciun biomarker din document nu a făcut match cu baza de date.")
+                            st.info(
+                                "Niciun biomarker din document nu a făcut match cu baza de date."
+                            )
                         else:
                             for rez in rezultate_salvate:
                                 text_afisat = f"**{rez['nume']}**: {rez['valoare']} {rez['um']} *(Referință: {rez['min']} - {rez['max']})*"
-                                
-                                if rez['stare'] == "OPTIM_VERDE":
+
+                                if rez["stare"] == "OPTIM_VERDE":
                                     st.success(f"✅ {text_afisat} ➔ 🟢 **OPTIM**")
-                                    
-                                elif rez['stare'] == "BORDERLINE_MIN_GALBEN":
-                                    st.warning(f"⚠️ {text_afisat} ➔ 🟡 **APROAPE DE LIMITA INFERIOARĂ**")
-                                    
-                                elif rez['stare'] == "BORDERLINE_MAX_GALBEN":
-                                    st.warning(f"⚠️ {text_afisat} ➔ 🟡 **APROAPE DE LIMITA SUPERIOARĂ**")
-                                    
-                                elif rez['stare'] == "SCAZUT_ROSU":
-                                    st.error(f"📉 {text_afisat} ➔ 🔴 **ANOMALIE: SCĂZUT**")
-                                    
-                                elif rez['stare'] == "CRESCUT_ROSU":
-                                    st.error(f"📈 {text_afisat} ➔ 🔴 **ANOMALIE: CRESCUT**")
-                                
+
+                                elif rez["stare"] == "BORDERLINE_MIN_GALBEN":
+                                    st.warning(
+                                        f"⚠️ {text_afisat} ➔ 🟡 **APROAPE DE LIMITA INFERIOARĂ**"
+                                    )
+
+                                elif rez["stare"] == "BORDERLINE_MAX_GALBEN":
+                                    st.warning(
+                                        f"⚠️ {text_afisat} ➔ 🟡 **APROAPE DE LIMITA SUPERIOARĂ**"
+                                    )
+
+                                elif rez["stare"] == "SCAZUT_ROSU":
+                                    st.error(
+                                        f"📉 {text_afisat} ➔ 🔴 **ANOMALIE: SCĂZUT**"
+                                    )
+
+                                elif rez["stare"] == "CRESCUT_ROSU":
+                                    st.error(
+                                        f"📈 {text_afisat} ➔ 🔴 **ANOMALIE: CRESCUT**"
+                                    )
+
                     except Exception as e:
                         st.error(f"A intervenit o problemă: {e}")
 
     with tab2:
         st.markdown("### 📈 Evoluția Biomarkerilor")
-        st.markdown("Selectează un biomarker pentru a vedea tendința din ultimele luni.")
+        st.markdown(
+            "Selectează un biomarker pentru a vedea tendința din ultimele luni."
+        )
 
         date_istoric = pd.DataFrame(
             {
@@ -271,7 +309,9 @@ def render_dashboard():
 def render_auth_page():
     st.title("🏥 MEDICODE")
     st.subheader("Autentificare")
-    st.write("Creează un cont nou sau conectează-te pentru a continua către panoul medical.")
+    st.write(
+        "Creează un cont nou sau conectează-te pentru a continua către panoul medical."
+    )
 
     action = st.radio("Alege acțiunea", ["Conectare", "Înregistrare"], horizontal=True)
 
@@ -354,7 +394,9 @@ ensure_auth_schema()
 initialize_session_state()
 
 if st.session_state.authenticated and st.session_state.current_user_id is not None:
-    st.session_state.current_user = dict(get_user_by_id(st.session_state.current_user_id))
+    st.session_state.current_user = dict(
+        get_user_by_id(st.session_state.current_user_id)
+    )
     render_dashboard()
 else:
     render_auth_page()

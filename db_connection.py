@@ -1,6 +1,7 @@
 import sqlite3
 import os
 
+
 class DatabaseConnection:
     _instance = None
 
@@ -14,8 +15,8 @@ class DatabaseConnection:
     def _connect(self):
         # Construim calea relativa catre folderul database
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        db_path = os.path.join(base_dir, 'database', 'MEDICODE')
-        
+        db_path = os.path.join(base_dir, "database", "MEDICODE")
+
         try:
             self._conn = sqlite3.connect(db_path, check_same_thread=False)
             # Activam suportul pentru Foreign Keys (optional, dar recomandat)
