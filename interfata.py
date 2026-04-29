@@ -29,6 +29,7 @@ def get_db_connection():
 
 def ensure_auth_schema():
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    db_folder = os.path.join(base_dir, 'database')
     db_path = os.path.join(base_dir, 'database', 'MEDICODE')
     
     conn = sqlite3.connect(db_path)
