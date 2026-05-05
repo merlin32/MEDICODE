@@ -329,12 +329,9 @@ def render_auth_page():
     action = st.radio("Alege acțiunea", ["Conectare", "Înregistrare"], horizontal=True)
 
     if action == "Conectare":
-        with st.form("login_form"):
-            email = st.text_input("Email")
-            parola = st.text_input("Parolă", type="password")
-            submitted = st.form_submit_button("Conectează-te")
-
-        if submitted:
+        email = st.text_input("Email")
+        parola = st.text_input("Parolă", type="password")
+        if st.button("Conectează-te"):
             if not email or not parola:
                 st.error("Completează emailul și parola.")
                 return
@@ -350,22 +347,19 @@ def render_auth_page():
             st.error(result)
 
     else:
-        with st.form("register_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                nume = st.text_input("Nume")
-                cnp = st.text_input("CNP")
-                sex = st.selectbox("Sex", ["M", "F"])
-            with col2:
-                prenume = st.text_input("Prenume")
-                data_nasterii = st.date_input("Data nașterii")
-                email = st.text_input("Email")
+        col1, col2 = st.columns(2)
+        with col1:
+            nume = st.text_input("Nume")
+            cnp = st.text_input("CNP")
+            sex = st.selectbox("Sex", ["M", "F"])
+        with col2:
+            prenume = st.text_input("Prenume")
+            data_nasterii = st.date_input("Data nașterii")
+            email = st.text_input("Email")
 
-            parola = st.text_input("Parolă", type="password")
-            confirma_parola = st.text_input("Confirmă parola", type="password")
-            submitted = st.form_submit_button("Creează cont")
-
-        if submitted:
+        parola = st.text_input("Parolă", type="password")
+        confirma_parola = st.text_input("Confirmă parola", type="password")
+        if st.button("Creează cont"):
             if not all([nume, prenume, cnp, email, parola, confirma_parola]):
                 st.error("Completează toate câmpurile obligatorii.")
                 return
