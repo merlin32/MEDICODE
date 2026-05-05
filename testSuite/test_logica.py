@@ -1,4 +1,3 @@
-import pytest
 from interfata import hash_password, verify_password
 
 

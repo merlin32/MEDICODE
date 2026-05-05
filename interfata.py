@@ -2,7 +2,6 @@ import hashlib
 import os
 import secrets
 import sqlite3
-import time
 
 import pandas as pd
 import streamlit as st
@@ -10,9 +9,6 @@ import streamlit as st
 from db_connection import DatabaseConnection
 import tempfile
 import datetime
-from demo_paddleocr import extrage_text_cu_paddle, extrage_date_structurate
-from inserare_BD import proceseaza_si_salveaza_buletin
-from anomalies_detector.anomalies_detector import genereaza_raport_json
 
 st.set_page_config(page_title="MEDICODE", page_icon="🏥", layout="centered")
 
@@ -37,12 +33,18 @@ def ensure_auth_schema():
     conn.row_factory = sqlite3.Row
 
     try:
-        existing_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info(Utilizatori)").fetchall()
-        }
+        tabela_exista = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='Utilizatori'"
+        ).fetchone()
 
-        if "parola_hash" not in existing_columns:
-            conn.execute("ALTER TABLE Utilizatori ADD COLUMN parola_hash TEXT")
+        if tabela_exista:
+            existing_columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(Utilizatori)").fetchall()
+            }
+
+            if "parola_hash" not in existing_columns:
+                conn.execute("ALTER TABLE Utilizatori ADD COLUMN parola_hash TEXT")
 
         conn.execute("DROP TABLE IF EXISTS Utilizator_Conturi")
         conn.commit()
@@ -222,6 +224,11 @@ def render_dashboard():
                                 tmp.write(fisier.getvalue())
                                 tmp_path = tmp.name
 
+                            from demo_paddleocr import (
+                                extrage_date_structurate,
+                                extrage_text_cu_paddle,
+                            )
+
                             text_brut = extrage_text_cu_paddle(tmp_path)
                             date_structurate = extrage_date_structurate(text_brut)
                             toate_datele_ocr.extend(date_structurate)
@@ -232,6 +239,8 @@ def render_dashboard():
                         sex_user_curent = current_user["sex"]
                         data_rec_str = data_recoltare.strftime("%Y-%m-%d")
 
+                        from inserare_BD import proceseaza_si_salveaza_buletin
+
                         rezultate_salvate = proceseaza_si_salveaza_buletin(
                             id_user_curent,
                             sex_user_curent,
@@ -240,6 +249,10 @@ def render_dashboard():
                         )
 
                         # 3. Rulare script anomalies_detector pentru a genera raportul JSON cu alertele globale
+                        from anomalies_detector.anomalies_detector import (
+                            genereaza_raport_json,
+                        )
+
                         genereaza_raport_json()
 
                         # 4. Afișarea în interfață cu Roșu/Galben/Verde
