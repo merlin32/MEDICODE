@@ -2,8 +2,8 @@ version: 2
 updates:
   # Actualizează pachetele de tip pip (Python)
   - package-ecosystem: "pip"
-    directory: "."
+    directory: "/"
     schedule:
       interval: "weekly" # Verifică în fiecare săptămână
     labels:
-      - "dependencies"
+      - "requirements"
