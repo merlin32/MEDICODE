@@ -35,4 +35,4 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Pytest with Coverage
-        run: pytest --cov=./ --cov-report=xml
+        run: python -m pytest --cov=./ --cov-report=xml
