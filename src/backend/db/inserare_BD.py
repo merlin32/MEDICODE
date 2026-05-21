@@ -1,5 +1,5 @@
 import sqlite3
-from db_connection import DatabaseConnection
+from src.backend.db.db_connection import DatabaseConnection
 
 
 def proceseaza_si_salveaza_buletin(

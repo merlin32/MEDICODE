@@ -1,11 +1,6 @@
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from db_connection import DatabaseConnection
 import json
 import sqlite3
+from src.backend.db.db_connection import DatabaseConnection
 
 
 def genereaza_raport_json(fisier_iesire="biomarkeri_problematici.json"):

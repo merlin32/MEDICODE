@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch, mock_open
 from hypothesis import given, assume, settings
 from hypothesis import strategies as st
 
-from anomalies_detector import genereaza_raport_json
+from src.backend.core.anomalies_detector import genereaza_raport_json
 
 # ---------------------------------------------------------------------------
 # Strategii reutilizabile
@@ -68,7 +68,7 @@ class TestValoriNormale(unittest.TestCase):
         val=valoare_reala,
     )
     @settings(max_examples=200)
-    @patch("anomalies_detector.DatabaseConnection")
+    @patch("src.backend.core.anomalies_detector.DatabaseConnection")
     def test_valoare_normala_nu_apare_in_output(
         self, mock_db_class, u_id, s_id, nume, v_min, v_max, val
     ):
@@ -111,7 +111,7 @@ class TestValoriAnormale(unittest.TestCase):
         val=valoare_reala,
     )
     @settings(max_examples=200)
-    @patch("anomalies_detector.DatabaseConnection")
+    @patch("src.backend.core.anomalies_detector.DatabaseConnection")
     def test_valoare_anormala_apare_in_output(
         self, mock_db_class, u_id, s_id, nume, v_min, v_max, val
     ):
@@ -152,7 +152,7 @@ class TestDeviere(unittest.TestCase):
         val=valoare_reala,
     )
     @settings(max_examples=200)
-    @patch("anomalies_detector.DatabaseConnection")
+    @patch("src.backend.core.anomalies_detector.DatabaseConnection")
     def test_devierea_este_intotdeauna_pozitiva(
         self, mock_db_class, u_id, s_id, v_min, v_max, val
     ):
@@ -193,7 +193,7 @@ class TestDeviere(unittest.TestCase):
         val=valoare_reala,
     )
     @settings(max_examples=200)
-    @patch("anomalies_detector.DatabaseConnection")
+    @patch("src.backend.core.anomalies_detector.DatabaseConnection")
     def test_devierea_cu_referinte_pozitive(self, mock_db_class, v_min, v_max, val):
         """
         PROPRIETATE: Cand v_min > 0 si v_max > 0, formula de deviere
@@ -233,7 +233,7 @@ class TestGrupare(unittest.TestCase):
         val=st.just(150.0),  # mereu anormal
     )
     @settings(max_examples=100)
-    @patch("anomalies_detector.DatabaseConnection")
+    @patch("src.backend.core.anomalies_detector.DatabaseConnection")
     def test_numar_utilizatori_in_output(self, mock_db_class, u_ids, v_min, v_max, val):
         """
         PROPRIETATE: Numarul de utilizatori distincti din output
@@ -263,7 +263,7 @@ class TestGrupare(unittest.TestCase):
         s_ids=st.lists(id_pozitiv, min_size=1, max_size=10, unique=True),
     )
     @settings(max_examples=100)
-    @patch("anomalies_detector.DatabaseConnection")
+    @patch("src.backend.core.anomalies_detector.DatabaseConnection")
     def test_numar_sesiuni_per_utilizator(self, mock_db_class, s_ids):
         """
         PROPRIETATE: Numarul de sesiuni per utilizator in output
@@ -303,7 +303,7 @@ class TestJsonSerializabil(unittest.TestCase):
         val=valoare_reala,
     )
     @settings(max_examples=200)
-    @patch("anomalies_detector.DatabaseConnection")
+    @patch("src.backend.core.anomalies_detector.DatabaseConnection")
     def test_output_este_json_serializabil(
         self, mock_db_class, u_id, s_id, v_min, v_max, val
     ):

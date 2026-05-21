@@ -1,5 +1,8 @@
-database/
 .venv/
+data/
+.pytest_cache/
+.ruff_cache/
 __pycache__/
+*.db
 temp/
 biomarkeri_problematici.json

@@ -3,7 +3,7 @@ from streamlit.testing.v1 import AppTest
 
 def test_afisare_pagina_autentificare():
     # Pornim aplicația invizibil
-    at = AppTest.from_file("interfata.py").run()
+    at = AppTest.from_file("src/frontend/interfata.py").run()
 
     # Verificăm dacă textele principale se randează corect
     assert at.title[0].value == "🏥 MEDICODE"
@@ -14,7 +14,7 @@ def test_afisare_pagina_autentificare():
 
 
 def test_eroare_login_fara_date():
-    at = AppTest.from_file("interfata.py").run()
+    at = AppTest.from_file("src/frontend/interfata.py").run()
 
     # Simulăm apăsarea butonului "Conectează-te" cu câmpurile goale
     at.button[0].click().run()

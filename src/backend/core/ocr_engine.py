@@ -5,8 +5,12 @@ import re
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
-FISIER_TEST = "teste/test1.pdf"  # Fisierele trebuie sa fie de tip: .pdf, .jpg, .png
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+FISIER_TEST = str(
+    PROJECT_ROOT / "data" / "resurse_medicale" / "test1.pdf"
+)  # Fisierele trebuie sa fie de tip: .pdf, .jpg, .png
 
 print("[0/3] Incarcare modele neuronale PaddleOCR...")
 ocr = PaddleOCR(use_angle_cls=True, lang="ro", show_log=False)

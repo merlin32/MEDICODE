@@ -1,4 +1,4 @@
-from interfata import hash_password, verify_password
+from src.frontend.interfata import hash_password, verify_password
 
 
 def test_hashing_parola():

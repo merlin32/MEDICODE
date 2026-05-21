@@ -6,7 +6,7 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 
-from db_connection import DatabaseConnection
+from src.backend.db.db_connection import DatabaseConnection, get_database_path
 import tempfile
 import datetime
 
@@ -23,13 +23,9 @@ def get_db_connection():
 
 
 def ensure_auth_schema():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    db_folder = os.path.join(base_dir, "database")
-    db_path = os.path.join(base_dir, "database", "MEDICODE")
+    db_path = get_database_path()
 
-    os.makedirs(db_folder, exist_ok=True)
-
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
 
     try:
@@ -224,7 +220,7 @@ def render_dashboard():
                                 tmp.write(fisier.getvalue())
                                 tmp_path = tmp.name
 
-                            from demo_paddleocr import (
+                            from src.backend.core.ocr_engine import (
                                 extrage_date_structurate,
                                 extrage_text_cu_paddle,
                             )
@@ -239,7 +235,9 @@ def render_dashboard():
                         sex_user_curent = current_user["sex"]
                         data_rec_str = data_recoltare.strftime("%Y-%m-%d")
 
-                        from inserare_BD import proceseaza_si_salveaza_buletin
+                        from src.backend.db.inserare_BD import (
+                            proceseaza_si_salveaza_buletin,
+                        )
 
                         rezultate_salvate = proceseaza_si_salveaza_buletin(
                             id_user_curent,
@@ -249,7 +247,7 @@ def render_dashboard():
                         )
 
                         # 3. Rulare script anomalies_detector pentru a genera raportul JSON cu alertele globale
-                        from anomalies_detector.anomalies_detector import (
+                        from src.backend.core.anomalies_detector import (
                             genereaza_raport_json,
                         )
 
