@@ -1,8 +1,10 @@
 .venv/
 data/
+.hypothesis/
 .pytest_cache/
 .ruff_cache/
 __pycache__/
 *.db
 temp/
+medicode.egg-info
 biomarkeri_problematici.json

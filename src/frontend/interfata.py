@@ -1,20 +1,13 @@
 import os
-import sys
-
-radacina_proiect = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if radacina_proiect not in sys.path:
-    sys.path.insert(0, radacina_proiect)
-
+import tempfile
+import datetime
 import hashlib
 import secrets
 import sqlite3
-
 import pandas as pd
 import streamlit as st
 
 from src.backend.db.db_connection import DatabaseConnection, get_database_path
-import tempfile
-import datetime
 
 st.set_page_config(page_title="MEDICODE", page_icon="🏥", layout="centered")
 
