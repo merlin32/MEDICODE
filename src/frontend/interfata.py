@@ -1,5 +1,11 @@
-import hashlib
 import os
+import sys
+
+radacina_proiect = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if radacina_proiect not in sys.path:
+    sys.path.insert(0, radacina_proiect)
+
+import hashlib
 import secrets
 import sqlite3
 
@@ -194,7 +200,10 @@ def render_dashboard():
     with tab1:
         st.markdown("### Încarcă buletinul de analize")
         data_recoltare = st.date_input(
-            "Data Recoltării (cum apare pe foaie):", datetime.date.today()
+            "Data recoltării (cum apare pe foaie):",
+            min_value=datetime.date.today() - datetime.timedelta(days=10 * 365),
+            max_value=datetime.date.today(),
+            value=datetime.date.today(),
         )
 
         fisiere_incarcate = st.file_uploader(
@@ -352,7 +361,12 @@ def render_auth_page():
             sex = st.selectbox("Sex", ["M", "F"])
         with col2:
             prenume = st.text_input("Prenume")
-            data_nasterii = st.date_input("Data nașterii")
+            data_nasterii = st.date_input(
+                "Data nașterii",
+                min_value=datetime.date(1900, 1, 1),
+                max_value=datetime.date.today() - datetime.timedelta(days=3 * 365),
+                value=datetime.date(1990, 1, 1),
+            )
             email = st.text_input("Email")
 
         parola = st.text_input("Parolă", type="password")
