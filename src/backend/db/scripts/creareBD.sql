@@ -64,7 +64,7 @@ CREATE TABLE Biomarkeri (
 CREATE TABLE Utilizator_Afectiune (
     id_utilizator INTEGER NOT NULL,
     nume_afectiune TEXT NOT NULL,
-    status TEXT, -- ex: 'Activ', 'Remisie'
+    status TEXT,
     PRIMARY KEY (id_utilizator, nume_afectiune),
     FOREIGN KEY (id_utilizator) REFERENCES Utilizatori(id_utilizator) ON DELETE CASCADE,
     FOREIGN KEY (nume_afectiune) REFERENCES Afectiuni(nume_afectiune) ON DELETE CASCADE
@@ -73,7 +73,7 @@ CREATE TABLE Utilizator_Afectiune (
 -- Tabel Afectiuni (Catalogul General)
 CREATE TABLE Afectiuni (
     nume_afectiune TEXT PRIMARY KEY,
-    descriere_generala TEXT NOT NULL
+    descriere_generala TEXT
 );
 
 -- Indexare pentru rapiditatea interogărilor

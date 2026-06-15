@@ -1,19 +1,158 @@
-import os
-import tempfile
 import datetime
 import hashlib
+import os
 import secrets
 import sqlite3
-import pandas as pd
 import streamlit as st
+import sys
 
-from src.backend.db.db_connection import DatabaseConnection, get_database_path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from src.backend.db.db_connection import DatabaseConnection, get_database_path #noqa: E402
+
+
+try:
+    from streamlit_cookies_controller import CookieController  # type: ignore
+    # Adăugăm un "key" constant pentru a nu reseta componenta la refresh
+    cookie_controller = CookieController(key="medicode_cookies")
+except ImportError:
+    CookieController = None  # type: ignore
+    cookie_controller = None
+
 
 st.set_page_config(page_title="MEDICODE", page_icon="🏥", layout="centered")
+
+# --- CSS PENTRU ASCUNDEREA OPȚIUNII 'SELECT ALL' LA NIVEL GLOBAL ---
+st.markdown(
+    """
+    <style>
+    /* Ascunde instrucțiunile */
+    div[data-testid="InputInstructions"] {
+        display: none !important;
+    }
+
+    /* Ascunde Ochiul Parolei din Browser */
+    input::-ms-reveal,
+    input::-ms-clear,
+    input::-webkit-credentials-auto-fill-button {
+        display: none !important;
+    }
+    
+    /* Ascundem meniul nativ complet (deoarece noi îl construim manual jos) */
+    [data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+
+    /* Design pentru link-urile generate de st.page_link */
+    [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"] {
+        background-color: transparent;
+        border-radius: 12px !important;
+        margin: 6px 0px !important;
+        padding: 12px 16px !important;
+        text-decoration: none !important;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+        border: 1px solid transparent;
+        display: flex;
+        align-items: center;
+    }
+
+    /* Efect de hover: Butonul glisează ușor la dreapta și se colorează */
+    [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]:hover {
+        transform: translateX(6px);
+        background-color: rgba(255, 75, 75, 0.08) !important;
+        border-color: rgba(255, 75, 75, 0.3);
+        box-shadow: 0 4px 12px rgba(255, 75, 75, 0.1) !important;
+    }
+
+    /* Stilul pentru PAGINA ACTIVĂ (cea pe care te afli) */
+    [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][data-active="true"],
+    [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-current="page"] {
+        background: linear-gradient(90deg, #ff4b4b 0%, #ff6b6b 100%) !important;
+        box-shadow: 0 4px 15px rgba(255, 75, 75, 0.3) !important;
+        border: none !important;
+        transform: scale(1.02);
+    }
+
+    /* Asigurăm că iconița și textul paginii active sunt albe pentru contrast maxim */
+    [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][data-active="true"] p,
+    [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-current="page"] p {
+        color: white !important;
+        font-weight: 600 !important;
+    }
+    
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 PBKDF2_ITERATIONS = 120_000
 
 
+# ==========================================
+# GESTIONAREA COOKIE-URILOR
+# ==========================================
+def set_cookie_and_reload(user_id):
+    st.session_state.logout_requested = False
+    st.session_state.authenticated = True
+    st.session_state.current_user_id = int(user_id)
+
+    user_data = get_user_by_id(user_id)
+    if user_data:
+        st.session_state.current_user = dict(user_data)
+
+    # Salvăm ID-ul într-un flag pentru ca funcția de inițializare să scrie cookie-ul în siguranță
+    # la următoarea randare (ca să nu fie ucis de rerun)
+    st.session_state.pending_cookie = user_id
+
+    st.rerun()  # Folosim rerun, NU switch_page
+
+
+def clear_cookie_and_reload():
+    """Deconectare nativă folosind starea Streamlit, fără JavaScript."""
+    # Resetăm starea internă pentru a intra pe modul "deconectat"
+    st.session_state.authenticated = False
+    st.session_state.current_user_id = None
+    st.session_state.current_user = None
+    st.session_state.page = "📄 Încărcare & Evaluare"
+    st.query_params.clear()
+
+    # Activăm scutul: îi spune aplicației să șteargă cookie-ul imediat după repornire
+    st.session_state.clear_cookie_on_next_run = True
+
+    # Repornim instantaneu. Tranziția va fi invizibilă și fluidă.
+    st.rerun()
+
+
+def get_saved_user_id():
+    """Citește cookie-ul din headerele HTTP sau din componentă, ignorând erorile de inițializare."""
+    if hasattr(st, "context") and hasattr(st.context, "cookies"):
+        cookies = st.context.cookies
+        if "medicode_user_id" in cookies:
+            val = cookies["medicode_user_id"]
+            if val and str(val).strip() not in ["", "None"]:
+                return val
+
+    if cookie_controller:
+        try:
+            saved_user_id = cookie_controller.get("medicode_user_id")
+            if saved_user_id and str(saved_user_id).strip() not in ["", "None"]:
+                return saved_user_id
+        except TypeError:
+            # Componenta web nu s-a sincronizat încă (dicționarul de cookie-uri este None)
+            pass
+        except Exception:
+            # Captăm orice altă eroare de la controller pentru a nu bloca aplicația
+            pass
+
+    return None
+
+
+# ==========================================
+# BAZA DE DATE & SCHEMĂ
+# ==========================================
 def get_db_connection():
     db_instance = DatabaseConnection()
     conn = db_instance.connection
@@ -23,7 +162,6 @@ def get_db_connection():
 
 def ensure_auth_schema():
     db_path = get_database_path()
-
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
 
@@ -37,12 +175,28 @@ def ensure_auth_schema():
                 row[1]
                 for row in conn.execute("PRAGMA table_info(Utilizatori)").fetchall()
             }
-
             if "parola_hash" not in existing_columns:
                 conn.execute("ALTER TABLE Utilizatori ADD COLUMN parola_hash TEXT")
 
-        conn.execute("DROP TABLE IF EXISTS Utilizator_Conturi")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS Afectiuni (
+                nume_afectiune TEXT PRIMARY KEY,
+                descriere_generala TEXT
+            )
+            """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS Utilizator_Afectiune (
+                id_utilizator INTEGER NOT NULL,
+                nume_afectiune TEXT NOT NULL,
+                status TEXT,
+                PRIMARY KEY (id_utilizator, nume_afectiune),
+                FOREIGN KEY (id_utilizator) REFERENCES Utilizatori(id_utilizator) ON DELETE CASCADE,
+                FOREIGN KEY (nume_afectiune) REFERENCES Afectiuni(nume_afectiune) ON DELETE CASCADE
+            )
+            """)
         conn.commit()
+    except Exception as e:
+        print(f"Eroare la inițializarea schemei: {e}")
     finally:
         conn.close()
 
@@ -65,11 +219,7 @@ def verify_password(password, expected_hash):
 def get_user_by_email(email):
     conn = get_db_connection()
     return conn.execute(
-        """
-        SELECT *
-        FROM Utilizatori
-        WHERE lower(email) = lower(?)
-        """,
+        "SELECT * FROM Utilizatori WHERE lower(email) = lower(?)",
         (email.strip(),),
     ).fetchone()
 
@@ -77,11 +227,7 @@ def get_user_by_email(email):
 def get_user_by_id(user_id):
     conn = get_db_connection()
     return conn.execute(
-        """
-        SELECT *
-        FROM Utilizatori
-        WHERE id_utilizator = ?
-        """,
+        "SELECT * FROM Utilizatori WHERE id_utilizator = ?",
         (user_id,),
     ).fetchone()
 
@@ -101,55 +247,90 @@ def register_user(form_data):
                 False,
                 "Există deja un cont cu acest email, dar CNP-ul introdus nu corespunde.",
             )
-
         if existing_user["parola_hash"]:
             return (
                 False,
                 "Acest utilizator are deja un cont activ. Te poți conecta direct.",
             )
 
+        user_id = existing_user["id_utilizator"]
         conn.execute(
-            """
-            UPDATE Utilizatori
-            SET parola_hash = ?
-            WHERE id_utilizator = ?
-            """,
-            (password_hash, existing_user["id_utilizator"]),
+            "UPDATE Utilizatori SET parola_hash = ? WHERE id_utilizator = ?",
+            (password_hash, user_id),
         )
-        conn.commit()
-        return True, existing_user["id_utilizator"]
+    else:
+        cursor = conn.execute(
+            """
+            INSERT INTO Utilizatori (cnp, nume, prenume, email, sex, data_nasterii, parola_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                form_data["cnp"].strip(),
+                form_data["nume"].strip(),
+                form_data["prenume"].strip(),
+                form_data["email"].strip(),
+                form_data["sex"],
+                form_data["data_nasterii"],
+                password_hash,
+            ),
+        )
+        user_id = cursor.lastrowid
 
-    cursor = conn.execute(
-        """
-        INSERT INTO Utilizatori (cnp, nume, prenume, email, sex, data_nasterii, parola_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            form_data["cnp"].strip(),
-            form_data["nume"].strip(),
-            form_data["prenume"].strip(),
-            form_data["email"].strip(),
-            form_data["sex"],
-            form_data["data_nasterii"],
-            password_hash,
-        ),
-    )
+    if "afectiuni" in form_data and form_data["afectiuni"]:
+        for afectiune in form_data["afectiuni"]:
+            conn.execute(
+                "INSERT OR IGNORE INTO Afectiuni (nume_afectiune) VALUES (?)",
+                [afectiune],
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO Utilizator_Afectiune (id_utilizator, nume_afectiune, status)
+                VALUES (?, ?, ?)
+                """,
+                (user_id, afectiune, "Actuală"),
+            )
+
     conn.commit()
-    return True, cursor.lastrowid
+    return True, user_id
 
 
 def login_user(email, password):
     user = get_user_by_email(email)
     if user is None or user["parola_hash"] is None:
         return False, "Nu există un cont activ pentru acest email."
-
     if not verify_password(password, user["parola_hash"]):
         return False, "Parolă incorectă."
-
     return True, user["id_utilizator"]
 
 
+# ==========================================
+# INTERFAȚĂ & SESIUNE
+# ==========================================
 def initialize_session_state():
+    # --- 1. Ștergere Cookie Amânată (Logout) ---
+    is_logging_out = st.session_state.get("clear_cookie_on_next_run", False)
+    if is_logging_out:
+        if cookie_controller:
+            try:
+                cookie_controller.set("medicode_user_id", "", path="/")
+            except Exception:
+                pass
+        st.session_state.clear_cookie_on_next_run = False
+
+    # --- 2. Scriere Cookie Amânată (Login - AICI REZOLVĂM PERSISTENȚA) ---
+    if "pending_cookie" in st.session_state:
+        if cookie_controller:
+            try:
+                cookie_controller.set(
+                    "medicode_user_id", str(st.session_state.pending_cookie), path="/"
+                )
+            except Exception:
+                pass
+        del st.session_state["pending_cookie"]
+
+    # --- 3. Inițializare variabile default ---
+    if "logout_requested" not in st.session_state:
+        st.session_state.logout_requested = False
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     if "current_user_id" not in st.session_state:
@@ -157,181 +338,50 @@ def initialize_session_state():
     if "current_user" not in st.session_state:
         st.session_state.current_user = None
 
-
-def rerun_app():
-    if hasattr(st, "rerun"):
-        st.rerun()
-    else:
-        st.experimental_rerun()
-
-
-def logout():
-    st.session_state.authenticated = False
-    st.session_state.current_user_id = None
-    st.session_state.current_user = None
-    rerun_app()
-
-
-def render_dashboard():
-    current_user = st.session_state.current_user or {}
-
-    st.sidebar.success(
-        f"Conectat ca {current_user.get('prenume', '')} {current_user.get('nume', '')}".strip()
-    )
-    if st.sidebar.button("Deconectare"):
-        logout()
-
-    st.title("🏥 MEDICODE")
-    st.subheader("AI Diagnostic & Tracking Dashboard")
-
-    st.warning(
-        "⚠️ **DISCLAIMER:** Aplicația oferă informații educaționale bazate pe AI. Nu înlocuiește sfatul medicului."
-    )
-
-    tab1, tab2 = st.tabs(["📄 1. Încărcare & Evaluare", "📈 2. Istoric Medical"])
-
-    with tab1:
-        st.markdown("### Încarcă buletinul de analize")
-        data_recoltare = st.date_input(
-            "Data recoltării (cum apare pe foaie):",
-            min_value=datetime.date.today() - datetime.timedelta(days=10 * 365),
-            max_value=datetime.date.today(),
-            value=datetime.date.today(),
-        )
-
-        fisiere_incarcate = st.file_uploader(
-            "Formate acceptate: PDF, PNG, JPG (Puteți selecta mai multe pagini)",
-            type=["pdf", "png", "jpg"],
-            accept_multiple_files=True,
-        )
-
-        if fisiere_incarcate:
-            if st.button("🚀 Începe analiza", type="primary"):
-                with st.spinner(
-                    "Procesăm documentele, evaluăm medical și actualizăm baza de date..."
-                ):
-                    try:
-                        toate_datele_ocr = []
-
-                        # 1. OCR
-                        for fisier in fisiere_incarcate:
-                            extensie = fisier.name.split(".")[-1]
-                            with tempfile.NamedTemporaryFile(
-                                delete=False, suffix=f".{extensie}"
-                            ) as tmp:
-                                tmp.write(fisier.getvalue())
-                                tmp_path = tmp.name
-
-                            from src.backend.core.ocr_engine import (
-                                extrage_date_structurate,
-                                extrage_text_cu_paddle,
-                            )
-
-                            text_brut = extrage_text_cu_paddle(tmp_path)
-                            date_structurate = extrage_date_structurate(text_brut)
-                            toate_datele_ocr.extend(date_structurate)
-                            os.remove(tmp_path)
-
-                        # 2. Salvare BD & Obținere Evaluare Culori
-                        id_user_curent = current_user["id_utilizator"]
-                        sex_user_curent = current_user["sex"]
-                        data_rec_str = data_recoltare.strftime("%Y-%m-%d")
-
-                        from src.backend.db.inserare_BD import (
-                            proceseaza_si_salveaza_buletin,
-                        )
-
-                        rezultate_salvate = proceseaza_si_salveaza_buletin(
-                            id_user_curent,
-                            sex_user_curent,
-                            data_rec_str,
-                            toate_datele_ocr,
-                        )
-
-                        # 3. Rulare script anomalies_detector pentru a genera raportul JSON cu alertele globale
-                        from src.backend.core.anomalies_detector import (
-                            genereaza_raport_json,
-                        )
-
-                        genereaza_raport_json()
-
-                        # 4. Afișarea în interfață cu Roșu/Galben/Verde
-                        st.success(
-                            f"✅ Analiză finalizată! Am extras și salvat {len(rezultate_salvate)} rezultate medicale."
-                        )
-                        st.markdown("---")
-                        st.markdown("### 📊 Rezultatele Analizei Curente")
-
-                        if len(rezultate_salvate) == 0:
-                            st.info(
-                                "Niciun biomarker din document nu a făcut match cu baza de date."
-                            )
-                        else:
-                            for rez in rezultate_salvate:
-                                text_afisat = f"**{rez['nume']}**: {rez['valoare']} {rez['um']} *(Referință: {rez['min']} - {rez['max']})*"
-
-                                if rez["stare"] == "OPTIM_VERDE":
-                                    st.success(f"✅ {text_afisat} ➔ 🟢 **OPTIM**")
-
-                                elif rez["stare"] == "BORDERLINE_MIN_GALBEN":
-                                    st.warning(
-                                        f"⚠️ {text_afisat} ➔ 🟡 **APROAPE DE LIMITA INFERIOARĂ**"
-                                    )
-
-                                elif rez["stare"] == "BORDERLINE_MAX_GALBEN":
-                                    st.warning(
-                                        f"⚠️ {text_afisat} ➔ 🟡 **APROAPE DE LIMITA SUPERIOARĂ**"
-                                    )
-
-                                elif rez["stare"] == "SCAZUT_ROSU":
-                                    st.error(
-                                        f"📉 {text_afisat} ➔ 🔴 **ANOMALIE: SCĂZUT**"
-                                    )
-
-                                elif rez["stare"] == "CRESCUT_ROSU":
-                                    st.error(
-                                        f"📈 {text_afisat} ➔ 🔴 **ANOMALIE: CRESCUT**"
-                                    )
-
-                    except Exception as e:
-                        st.error(f"A intervenit o problemă: {e}")
-
-    with tab2:
-        st.markdown("### 📈 Evoluția Biomarkerilor")
-        st.markdown(
-            "Selectează un biomarker pentru a vedea tendința din ultimele luni."
-        )
-
-        date_istoric = pd.DataFrame(
-            {
-                "Glicemie (mg/dL)": [95, 105, 115],
-                "Sideremie (µg/dL)": [80, 60, 45],
-            },
-            index=["Octombrie 2025", "Decembrie 2025", "Februarie 2026"],
-        )
-
-        st.line_chart(date_istoric)
-
-        st.markdown("#### 📁 Sesiuni anterioare (Sânge)")
-        with st.expander("Sesiune - Decembrie 2025"):
-            st.write("Aici vei putea vedea detaliile vechi preluate din SQLite.")
-        with st.expander("Sesiune - Octombrie 2025"):
-            st.write("Toate valorile au fost în limite normale.")
+    # --- 4. Verificare sesiune activă (Recuperare Cookie) ---
+    if not st.session_state.authenticated and not st.session_state.logout_requested:
+        if not is_logging_out:
+            saved_id = get_saved_user_id()
+            if saved_id and str(saved_id).strip() not in ["", "None"]:
+                st.session_state.authenticated = True
+                st.session_state.current_user_id = int(saved_id)
 
 
 def render_auth_page():
     st.title("🏥 MEDICODE")
-    st.subheader("Autentificare")
-    st.write(
-        "Creează un cont nou sau conectează-te pentru a continua către panoul medical."
+    st.subheader("Autentificare pacient")
+
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="collapsedControl"] { display: none !important; }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    action = st.radio("Alege acțiunea", ["Conectare", "Înregistrare"], horizontal=True)
+    action = st.radio(
+        "Alegeți acțiunea:", ["Conectare", "Înregistrare"], horizontal=True
+    )
 
     if action == "Conectare":
-        email = st.text_input("Email")
-        parola = st.text_input("Parolă", type="password")
-        if st.button("Conectează-te"):
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input("Email")
+
+            parola = st.text_input(
+                "Parolă",
+                type="password",
+            )
+
+            # Adăugăm textul direct sub căsuța de parolă pentru a fi vizibil instant
+            st.caption(
+                "💡 *Sfat: Apasă tasta ENTER după parolă pentru conectare rapidă, sau folosește butonul de mai jos.*"
+            )
+
+            submit_login = st.form_submit_button("Conectează-te", type="primary")
+
+        if submit_login:
             if not email or not parola:
                 st.error("Completează emailul și parola.")
                 return
@@ -341,45 +391,144 @@ def render_auth_page():
                 st.session_state.authenticated = True
                 st.session_state.current_user_id = result
                 st.session_state.current_user = dict(get_user_by_id(result))
-                st.success("Autentificare reușită.")
-                rerun_app()
-
-            st.error(result)
+                st.session_state.logout_requested = False
+                set_cookie_and_reload(result)
+            else:
+                st.error(result)
 
     else:
-        col1, col2 = st.columns(2)
-        with col1:
-            nume = st.text_input("Nume")
-            cnp = st.text_input("CNP")
-            sex = st.selectbox("Sex", ["M", "F"])
-        with col2:
-            prenume = st.text_input("Prenume")
-            data_nasterii = st.date_input(
+        with st.form("register_form", clear_on_submit=False):
+            row1_col1, row1_col2 = st.columns(2)
+            nume = row1_col1.text_input("Nume")
+            prenume = row1_col2.text_input("Prenume")
+
+            row2_col1, row2_col2 = st.columns(2)
+            cnp = row2_col1.text_input("CNP")
+
+            data_nasterii = row2_col2.date_input(
                 "Data nașterii",
                 min_value=datetime.date(1900, 1, 1),
                 max_value=datetime.date.today() - datetime.timedelta(days=3 * 365),
-                value=datetime.date(1990, 1, 1),
+                value=None,
+                format="DD/MM/YYYY",
             )
-            email = st.text_input("Email")
 
-        parola = st.text_input("Parolă", type="password")
-        confirma_parola = st.text_input("Confirmă parola", type="password")
-        if st.button("Creează cont"):
-            if not all([nume, prenume, cnp, email, parola, confirma_parola]):
-                st.error("Completează toate câmpurile obligatorii.")
+            row3_col1, row3_col2 = st.columns(2)
+            sex = row3_col1.selectbox(
+                "Sex Biologic",
+                ["M", "F"],
+                index=None,
+                placeholder="Alege o opțiune",
+            )
+            email = row3_col2.text_input("Email")
+
+            parola = st.text_input("Parolă", type="password")
+            confirma_parola = st.text_input("Confirmă parola", type="password")
+
+            afectiuni_predefinite_dict = {
+                "Afecțiuni Cardiovasculare": [
+                    "Hipertensiune arterială (HTA)",
+                    "Boală cardiacă ischemică",
+                    "Insuficiență cardiacă cronică",
+                ],
+                "Afecțiuni Metabolice și Endocrine": [
+                    "Diabet zaharat (Tip 1 și Tip 2)",
+                    "Obezitate / Sindrom metabolic",
+                    "Boli tiroidiene (Hipotiroidism / Hipertiroidism)",
+                ],
+                "Afecțiuni Respiratorii": [
+                    "Astm bronșic",
+                    "Boală pulmonară obstructivă cronică (BPOC)",
+                ],
+                "Afecțiuni Neurologice și Psihice": [
+                    "Boala Alzheimer și alte demențe",
+                    "Boala Parkinson",
+                    "Scleroză multiplă",
+                    "Epilepsie",
+                    "Tulburări depresive și de anxietate",
+                ],
+                "Afecțiuni Oncologice": [
+                    "Cancer pulmonar",
+                    "Cancer colorectal",
+                    "Cancer mamar / de prostată",
+                ],
+                "Afecțiuni Hepatice și Gastrointestinale": [
+                    "Hepatite virale cronice (B, C, D)",
+                    "Ciroză hepatică",
+                ],
+                "Afecțiuni Reumatologice și Osoase": [
+                    "Poliartrită reumatoidă și artrită psoriazică",
+                    "Osteoporoză",
+                    "Spondilită anchilozantă",
+                ],
+                "Boli Infecțioase și Autoimune": [
+                    "Infecția cu HIV / SIDA",
+                    "Lupus eritematos sistemic (LES)",
+                ],
+                "Alte Afecțiuni Cronice": [
+                    "Boală cronică de rinichi (Insuficiență renală)",
+                    "Glaucom",
+                    "Afecțiuni stomatologice cronice (ex. Parodontoză)",
+                ],
+            }
+
+            # 1. Extragem bolile într-o listă unică și o sortăm alfabetic
+            lista_plata_afectiuni = []
+            for boli_din_categorie in afectiuni_predefinite_dict.values():
+                lista_plata_afectiuni.extend(boli_din_categorie)
+            lista_plata_afectiuni.sort()
+
+            # 2. Adăugăm "Altele" la finalul listei pentru logica ta custom
+            optiuni_multiselect = lista_plata_afectiuni + ["Altele"]
+
+            # 3. Randăm componenta multiselect cu noile date
+            afectiuni_selectate = st.multiselect(
+                "Suferiți în prezent de una sau mai dintre următoarele afecțiuni?",
+                options=optiuni_multiselect,
+                placeholder="Alege o opțiune",
+                default=None,
+            )
+
+            altele_input = ""
+            if "Altele" in afectiuni_selectate:
+                altele_input = st.text_input(
+                    "Specificați afecțiunea (separate prin virgulă):"
+                )
+
+            submit_register = st.form_submit_button("Creează cont", type="primary")
+
+        if submit_register:
+            if not all(
+                [nume, prenume, cnp, data_nasterii, email, sex, parola, confirma_parola]
+            ):
+                st.error(
+                    "Completează toate câmpurile obligatorii, inclusiv data nașterii și sexul biologic."
+                )
                 return
-
             if len(cnp) != 13 or not cnp.isdigit():
                 st.error("CNP-ul trebuie să aibă exact 13 cifre.")
                 return
-
             if "@" not in email:
                 st.error("Emailul introdus nu este valid.")
                 return
-
             if parola != confirma_parola:
                 st.error("Parolele nu coincid.")
                 return
+            if "Altele" in afectiuni_selectate and not altele_input.strip():
+                st.error(
+                    "Ați selectat 'Altele'. Vă rugăm să scrieți numele afecțiunii."
+                )
+                return
+
+            afectiuni_finale = [af for af in afectiuni_selectate if af != "Altele"]
+            if altele_input.strip():
+                afectiuni_finale.extend(
+                    [
+                        a.strip().capitalize()
+                        for a in altele_input.split(",")
+                        if a.strip()
+                    ]
+                )
 
             form_data = {
                 "nume": nume,
@@ -389,6 +538,7 @@ def render_auth_page():
                 "sex": sex,
                 "data_nasterii": data_nasterii.isoformat(),
                 "parola": parola,
+                "afectiuni": afectiuni_finale,
             }
 
             success, result = register_user(form_data)
@@ -396,19 +546,74 @@ def render_auth_page():
                 st.session_state.authenticated = True
                 st.session_state.current_user_id = result
                 st.session_state.current_user = dict(get_user_by_id(result))
-                st.success("Cont creat și utilizator autentificat.")
-                rerun_app()
+                st.session_state.logout_requested = False
+                set_cookie_and_reload(result)
+            else:
+                st.error(result)
 
-            st.error(result)
 
+# ==========================================
+# DEFINIREA GLOBALĂ A PAGINILOR (INSTANȚE STABILE)
+# ==========================================
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+views_dir = os.path.join(current_dir, "views")
+
+# 2. Parametrul `url_path` este OBLIGATORIU aici pentru a preveni ecranul alb pe Windows!
+pagina_evaluare = st.Page(
+    "views/evaluare.py", title="Încărcare & evaluare", icon="📄", url_path="evaluare"
+)
+pagina_istoric = st.Page(
+    "views/istoric.py", title="Istoric medical", icon="📈", url_path="istoric"
+)
+pagina_profil = st.Page("views/profil.py", title="Profilul meu", icon="⚙️", url_path="profil")
+
+pagina_login = st.Page(
+    render_auth_page, title="Autentificare", icon="🔒", url_path="login"
+)
+# ==========================================
+# PUNCTUL DE INTRARE PRINCIPAL (ROUTER MODERN)
+# ==========================================
 
 ensure_auth_schema()
 initialize_session_state()
 
 if st.session_state.authenticated and st.session_state.current_user_id is not None:
-    st.session_state.current_user = dict(
-        get_user_by_id(st.session_state.current_user_id)
+    # 1. Ne asigurăm că avem datele utilizatorului încărcate
+    if not st.session_state.current_user:
+        date_utilizator = get_user_by_id(st.session_state.current_user_id)
+        if date_utilizator:
+            st.session_state.current_user = dict(date_utilizator)
+        else:
+            clear_cookie_and_reload()
+
+    current_user = st.session_state.current_user
+    pagini_autentificate = [pagina_evaluare, pagina_istoric, pagina_profil]
+
+    # 2. Inițializăm navigația cu instanțele globale stabile
+    nav = st.navigation(pagini_autentificate, position="hidden")
+
+    # =========================================
+    # CONSTRUIREA MANUALĂ A SIDEBAR-ULUI
+    # =========================================
+    st.sidebar.markdown("### 👤 Utilizator curent")
+    st.sidebar.success(
+        f"{current_user.get('prenume', '')} {current_user.get('nume', '')}".strip()
     )
-    render_dashboard()
+    st.sidebar.markdown("---")
+
+    st.sidebar.markdown("### 🗺️ Meniu")
+    for pagina in pagini_autentificate:
+        st.sidebar.page_link(pagina, label=pagina.title, icon=pagina.icon)
+
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Deconectare", type="secondary"):
+        clear_cookie_and_reload()
+
+    # Rulăm instanța activă
+    nav.run()
+
 else:
-    render_auth_page()
+    # Configurare navigație securizată pentru vizitatori
+    nav = st.navigation([pagina_login], position="hidden")
+    nav.run()

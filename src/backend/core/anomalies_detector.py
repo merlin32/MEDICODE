@@ -4,44 +4,36 @@ from src.backend.db.db_connection import DatabaseConnection
 
 
 def genereaza_raport_json(fisier_iesire="biomarkeri_problematici.json"):
-
-    # Conectarea la baza de date folosind clasa Singleton din db_connection.py
-
     db_instanta = DatabaseConnection()
     conn = db_instanta.connection
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    # Query care face join intre toate tabelele si filtreaza sexul conform cerintei
-    # Folosim conditia: (sex_biomarker == sex_utilizator) SAU (sex_biomarker == 'I')
-
+    # Query aliniat perfect cu tabela și coloanele din creareBD.sql
     query = """
     SELECT 
         u.id_utilizator, 
         a.id_sesiune, 
         b.nume_biomarker, 
-        vm.valoare_masurata, 
-        b.valoare_min_ref, 
-        b.valoare_max_ref
+        vm.val_mas, 
+        b.ref_min, 
+        b.ref_max
     FROM Utilizatori u
     JOIN Analize a ON u.id_utilizator = a.id_utilizator
-    JOIN Valori_Masurate vm ON a.id_sesiune = vm.id_analiza
+    JOIN Valori_Masurate vm ON a.id_sesiune = vm.id_sesiune
     JOIN Biomarkeri b ON vm.id_biomarker = b.id_biomarker
-    WHERE (b.sex = u.sex OR b.sex = 'I')
     """
 
     cursor.execute(query)
     rows = cursor.fetchall()
 
-    # Structura intermediara pentru a grupa datele: { id_utilizator: { id_sesiune: [nume_biomarkeri] } }
     rezultate = {}
 
     for row in rows:
-        val = row["valoare_masurata"]
-        v_min = row["valoare_min_ref"]
-        v_max = row["valoare_max_ref"]
+        val = row["val_mas"]
+        v_min = row["ref_min"]
+        v_max = row["ref_max"]
 
-        # Verificam daca valoarea este in afara intervalului
         if val < v_min or val > v_max:
             u_id = row["id_utilizator"]
             s_id = row["id_sesiune"]
@@ -65,7 +57,6 @@ def genereaza_raport_json(fisier_iesire="biomarkeri_problematici.json"):
                 }
             )
 
-    # Transformam structura intr-o lista formatata pentru JSON conform cerintei
     output_final = []
     for u_id, sesiuni in rezultate.items():
         utilizator_data = {"id_utilizator": u_id, "analize_problematice": []}
@@ -75,13 +66,7 @@ def genereaza_raport_json(fisier_iesire="biomarkeri_problematici.json"):
             )
         output_final.append(utilizator_data)
 
-    # Scrierea in fisier JSON
     with open(fisier_iesire, "w", encoding="utf-8") as f:
         json.dump(output_final, f, indent=4, ensure_ascii=False)
 
     print(f"Raportul a fost generat cu succes in {fisier_iesire}")
-
-
-# Rulare
-if __name__ == "__main__":
-    genereaza_raport_json()
