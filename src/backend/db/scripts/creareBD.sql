@@ -37,7 +37,7 @@ CREATE TABLE Analize (
 --Tabel Clinici
 CREATE TABLE Clinici (
     id_clinica INTEGER PRIMARY KEY AUTOINCREMENT,
-    nume_clinica TEXT NOT NULL
+    nume_clinica TEXT UNIQUE NOT NULL
 );
 
 -- Tabel Valori_Masurate
