@@ -14,7 +14,6 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 
-
 current_user = st.session_state.current_user
 
 st.title("🏥 MEDICODE")

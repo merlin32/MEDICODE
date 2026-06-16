@@ -14,7 +14,7 @@ if project_root not in sys.path:
 from src.backend.db.db_connection import (  # noqa: E402
     DatabaseConnection,
     get_database_path,
-) 
+)
 
 try:
     from streamlit_cookies_controller import CookieController  # type: ignore
