@@ -11,7 +11,6 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 
-from src.backend.db.db_connection import DatabaseConnection #noqa: E402
 
 current_user = st.session_state.current_user
 

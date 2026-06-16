@@ -2,6 +2,7 @@ import streamlit as st
 import datetime
 import tempfile
 import os
+import hashlib
 from fpdf import FPDF
 import sys
 
@@ -13,7 +14,6 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 
-from src.backend.db.db_connection import DatabaseConnection #noqa: E402
 
 current_user = st.session_state.current_user
 
@@ -37,20 +37,32 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
     font_bold = os.path.join(current_dir, "fonts", "PlayfairDisplay-Bold.ttf")
     font_italic = os.path.join(current_dir, "fonts", "PlayfairDisplay-Italic.ttf")
 
-    # Adăugăm fonturile în FPDF specificând explicit suportul Unicode
-    pdf.add_font("PlayfairDisplay", "", font_regular, uni=True)
-    pdf.add_font("PlayfairDisplay", "B", font_bold, uni=True)
-    pdf.add_font("PlayfairDisplay", "I", font_italic, uni=True)
+    # Încercăm să înregistrăm fonturile custom; dacă lipsesc, folosim un font
+    # Unicode built-in (DejaVuSans) ca fallback care suportă caractere românești
+    font_family = "PlayfairDisplay"
+    fonts_exist = all(os.path.exists(p) for p in (font_regular, font_bold, font_italic))
+    if fonts_exist:
+        try:
+            pdf.add_font("PlayfairDisplay", "", font_regular, uni=True)
+            pdf.add_font("PlayfairDisplay", "B", font_bold, uni=True)
+            pdf.add_font("PlayfairDisplay", "I", font_italic, uni=True)
+        except Exception:
+            fonts_exist = False
+
+    if not fonts_exist:
+        font_family = (
+            "DejaVuSans"  # Font Unicode built-in care suportă caractere românești
+        )
 
     # Titlu
-    pdf.set_font("PlayfairDisplay", "B", 16)
+    pdf.set_font(font_family, "B", 16)
     # Folosim strings normale (Python 3 tratează nativ UTF-8)
     pdf.cell(0, 10, "Explicația Analizelor Tale Medicale", ln=True, align="C")
     pdf.ln(5)
 
     # Detalii Pacient și Clinică
     # Detalii Pacient și Clinică
-    pdf.set_font("PlayfairDisplay", size=11)
+    pdf.set_font(font_family, size=11)
     pdf.cell(
         0,
         8,
@@ -72,7 +84,7 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
     # ----------------------------------
 
     # Textul AI-ului (Explicativ)
-    pdf.set_font("PlayfairDisplay", size=12)
+    pdf.set_font(font_family, size=12)
 
     # IMPORTANT: Ne asigurăm că string-ul nu conține caractere ciudate de tip byte
     # și curățăm eventualele neconcordanțe de encodare din textul primit de la AI
@@ -81,7 +93,7 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
 
     # Disclaimer
     pdf.ln(15)
-    pdf.set_font("PlayfairDisplay", "I", 10)
+    pdf.set_font(font_family, "I", 10)
 
     disclaimer_text = (
         "DISCLAIMER: Acest document este generat de Inteligența Artificială cu rol strict educativ și explicativ. "
@@ -167,6 +179,11 @@ if fisiere_incarcate:
                 try:
                     toate_datele_ocr = []
 
+                    from src.backend.core.ocr_engine import (
+                        extrage_date_structurate,
+                        extrage_text_cu_paddle,
+                    )
+
                     for fisier in fisiere_incarcate:
                         extensie = fisier.name.split(".")[-1]
                         with tempfile.NamedTemporaryFile(
@@ -175,15 +192,10 @@ if fisiere_incarcate:
                             tmp.write(fisier.getvalue())
                             tmp_path = tmp.name
 
-                    from src.backend.core.ocr_engine import (
-                        extrage_date_structurate,
-                        extrage_text_cu_paddle,
-                    )
-
-                    text_brut = extrage_text_cu_paddle(tmp_path)
-                    date_structurate = extrage_date_structurate(text_brut)
-                    toate_datele_ocr.extend(date_structurate)
-                    os.remove(tmp_path)
+                        text_brut = extrage_text_cu_paddle(tmp_path)
+                        date_structurate = extrage_date_structurate(text_brut)
+                        toate_datele_ocr.extend(date_structurate)
+                        os.remove(tmp_path)
 
                     id_user_curent = current_user["id_utilizator"]
                     sex_user_curent = current_user["sex"]
@@ -191,56 +203,88 @@ if fisiere_incarcate:
 
                     from src.backend.db.inserare_BD import (
                         proceseaza_si_salveaza_buletin,
+                        finalizeaza_analiza,
                     )
 
-                    rezultate_salvate = proceseaza_si_salveaza_buletin(
+                    upload_hash = hashlib.sha256()
+                    for fisier in fisiere_incarcate:
+                        upload_hash.update(fisier.name.encode("utf-8"))
+                        upload_hash.update(fisier.type.encode("utf-8"))
+                        upload_hash.update(fisier.getvalue())
+
+                    upload_hash_value = upload_hash.hexdigest()
+
+                    (
+                        rezultate_salvate,
+                        sesiune_reutilizata,
+                        id_sesiune,
+                        upload_allowed,
+                    ) = proceseaza_si_salveaza_buletin(
                         id_user_curent,
-                        sex_user_curent,
                         data_rec_str,
                         toate_datele_ocr,
                         clinica_finala,
+                        upload_hash=upload_hash_value,
                     )
 
-                    from src.backend.core.anomalies_detector import (
-                        genereaza_raport_json,
-                    )
-
-                    genereaza_raport_json()
-
-                    st.success(
-                        f"✅ Analiză finalizată! Am extras {len(rezultate_salvate)} biomarkeri."
-                    )
-                    st.markdown("---")
-
-                    # --- GENERAREA TEXTULUI EXPLICATIV (AI) ---
-                    st.markdown("### 🗣️ Ce înseamnă analizele tale?")
-
-                    if len(rezultate_salvate) == 0:
-                        st.info("Niciun biomarker din document nu a putut fi citit.")
+                    # VERIFICARE DUPLICAT FINALIZAT - IESIRE DEVREME
+                    if not upload_allowed:
+                        st.warning(
+                            "⚠️ Acest fișier a fost deja încărcat și procesat cu succes anterior. "
+                            "Nu se pot reintroduce rezultatele duplicate."
+                        )
                     else:
-                        with st.spinner("AI-ul formulează explicația simplificată..."):
-                            # AICI ADAUGI APELUL CĂTRE AI-UL TĂU.
-                            # Exemplu: text_explicativ_ai = genereaza_explicatie_pacient(rezultate_salvate)
-
-                            # Acesta este un text mock temporar până legi funcția reală AI:
-                            text_explicativ_ai = "Analizele tale arată în general bine. Glicemia este în limite normale, ceea ce înseamnă că organismul tău procesează corect zahărul. Am observat însă că fierul (sideremia) este puțin sub limita de jos, ceea ce îți poate da uneori o stare de oboseală. Celulele albe sunt la nivel normal, deci nu există semne de infecție."
-                        st.write(text_explicativ_ai)
-
-                        # --- EXPORT PDF ---
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        pdf_bytes = exporta_raport_pdf_pacient(
-                            text_ai=text_explicativ_ai,
-                            user_data=current_user,
-                            clinica=clinica_finala,
-                            data_rec=data_recoltare,
+                        # CONTINUARE DOAR DACA NU E DUPLICAT FINALIZAT
+                        from src.backend.core.anomalies_detector import (
+                            genereaza_raport_json,
                         )
 
-                        st.download_button(
-                            label="📥 Descarcă Explicația (PDF)",
-                            data=pdf_bytes,
-                            file_name=f"Rezultate_Explicate_{current_user['prenume']}_{data_recoltare}.pdf",
-                            mime="application/pdf",
-                            type="primary",
-                        )
+                        genereaza_raport_json()
+                        finalizeaza_analiza(id_sesiune)
+
+                        if sesiune_reutilizata:
+                            st.info(
+                                "⚠️ Această sesiune de analize a fost reluată după un upload anterior nereușit. Datele vechi au fost înlocuite și nu vor fi dublate."
+                            )
+                        else:
+                            st.success(
+                                f"✅ Analiză finalizată! Am extras {len(rezultate_salvate)} biomarkeri."
+                            )
+                        st.markdown("---")
+
+                        # --- GENERAREA TEXTULUI EXPLICATIV (AI) ---
+                        st.markdown("### 🗣️ Ce înseamnă analizele tale?")
+
+                        if len(rezultate_salvate) == 0:
+                            st.info(
+                                "Niciun biomarker din document nu a putut fi citit."
+                            )
+                        else:
+                            with st.spinner(
+                                "AI-ul formulează explicația simplificată..."
+                            ):
+                                # AICI ADAUGI APELUL CĂTRE AI-UL TĂU.
+                                # Exemplu: text_explicativ_ai = genereaza_explicatie_pacient(rezultate_salvate)
+
+                                # Acesta este un text mock temporar până legi funcția reală AI:
+                                text_explicativ_ai = "Analizele tale arată în general bine. Glicemia este în limite normale, ceea ce înseamnă că organismul tău procesează corect zahărul. Am observat însă că fierul (sideremia) este puțin sub limita de jos, ceea ce îți poate da uneori o stare de oboseală. Celulele albe sunt la nivel normal, deci nu există semne de infecție."
+                            st.write(text_explicativ_ai)
+
+                            # --- EXPORT PDF ---
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            pdf_bytes = exporta_raport_pdf_pacient(
+                                text_ai=text_explicativ_ai,
+                                user_data=current_user,
+                                clinica=clinica_finala,
+                                data_rec=data_recoltare,
+                            )
+
+                            st.download_button(
+                                label="📥 Descarcă Explicația (PDF)",
+                                data=pdf_bytes,
+                                file_name=f"Rezultate_Explicate_{current_user['prenume']}_{data_recoltare}.pdf",
+                                mime="application/pdf",
+                                type="primary",
+                            )
                 except Exception as e:
                     st.error(f"Eroare: {e}")

@@ -30,9 +30,12 @@ CREATE TABLE Analize (
     id_utilizator INTEGER NOT NULL,
     id_clinica INTEGER NOT NULL,
     data_recoltare DATE NOT NULL,
+    upload_hash TEXT,
+    finalizata INTEGER DEFAULT 0,
     FOREIGN KEY (id_utilizator) REFERENCES Utilizatori(id_utilizator) ON DELETE CASCADE,
     FOREIGN KEY (id_clinica) REFERENCES Clinici(id_clinica)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analize_upload_hash ON Analize(id_utilizator, upload_hash);
 
 --Tabel Clinici
 CREATE TABLE Clinici (

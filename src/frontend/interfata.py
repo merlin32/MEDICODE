@@ -11,11 +11,14 @@ project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from src.backend.db.db_connection import DatabaseConnection, get_database_path #noqa: E402
-
+from src.backend.db.db_connection import (  # noqa: E402
+    DatabaseConnection,
+    get_database_path,
+) 
 
 try:
     from streamlit_cookies_controller import CookieController  # type: ignore
+
     # Adăugăm un "key" constant pentru a nu reseta componenta la refresh
     cookie_controller = CookieController(key="medicode_cookies")
 except ImportError:
@@ -178,6 +181,25 @@ def ensure_auth_schema():
             if "parola_hash" not in existing_columns:
                 conn.execute("ALTER TABLE Utilizatori ADD COLUMN parola_hash TEXT")
 
+            # Schema upgrade pentru gestionarea upload-urilor duplicate
+            analize_exista = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='Analize'"
+            ).fetchone()
+            if analize_exista:
+                analize_columns = {
+                    row[1]
+                    for row in conn.execute("PRAGMA table_info(Analize)").fetchall()
+                }
+                if "upload_hash" not in analize_columns:
+                    conn.execute("ALTER TABLE Analize ADD COLUMN upload_hash TEXT")
+                if "finalizata" not in analize_columns:
+                    conn.execute(
+                        "ALTER TABLE Analize ADD COLUMN finalizata INTEGER DEFAULT 0"
+                    )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_analize_upload_hash ON Analize(id_utilizator, upload_hash)"
+                )
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS Afectiuni (
                 nume_afectiune TEXT PRIMARY KEY,
@@ -259,28 +281,36 @@ def register_user(form_data):
             (password_hash, user_id),
         )
     else:
-        cursor = conn.execute(
-            """
-            INSERT INTO Utilizatori (cnp, nume, prenume, email, sex, data_nasterii, parola_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                form_data["cnp"].strip(),
-                form_data["nume"].strip(),
-                form_data["prenume"].strip(),
-                form_data["email"].strip(),
-                form_data["sex"],
-                form_data["data_nasterii"],
-                password_hash,
-            ),
-        )
-        user_id = cursor.lastrowid
+        try:
+            cursor = conn.execute(
+                """
+                INSERT INTO Utilizatori (cnp, nume, prenume, email, sex, data_nasterii, parola_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    form_data["cnp"].strip(),
+                    form_data["nume"].strip(),
+                    form_data["prenume"].strip(),
+                    form_data["email"].strip(),
+                    form_data["sex"],
+                    form_data["data_nasterii"],
+                    password_hash,
+                ),
+            )
+            user_id = cursor.lastrowid
+        except sqlite3.IntegrityError as e:
+            message = str(e)
+            if "Utilizatori.cnp" in message:
+                return False, "CNP-ul introdus este deja asociat unui cont existent."
+            if "Utilizatori.email" in message:
+                return False, "Emailul introdus este deja asociat unui cont existent."
+            return False, "Datele introduse sunt deja folosite în baza de date."
 
     if "afectiuni" in form_data and form_data["afectiuni"]:
         for afectiune in form_data["afectiuni"]:
             conn.execute(
-                "INSERT OR IGNORE INTO Afectiuni (nume_afectiune) VALUES (?)",
-                [afectiune],
+                "INSERT OR IGNORE INTO Afectiuni (nume_afectiune, descriere_generala) VALUES (?, ?)",
+                (afectiune, ""),
             )
             conn.execute(
                 """
@@ -337,6 +367,8 @@ def initialize_session_state():
         st.session_state.current_user_id = None
     if "current_user" not in st.session_state:
         st.session_state.current_user = None
+    if "auth_tab_index" not in st.session_state:
+        st.session_state.auth_tab_index = 0  # 0 = Conectare, 1 = Înregistrare
 
     # --- 4. Verificare sesiune activă (Recuperare Cookie) ---
     if not st.session_state.authenticated and not st.session_state.logout_requested:
@@ -361,17 +393,30 @@ def render_auth_page():
         unsafe_allow_html=True,
     )
 
+    def update_auth_tab():
+        """Callback para actualizar el índice de la pestaña de autenticación"""
+        if "auth_action" in st.session_state:
+            st.session_state.auth_tab_index = (
+                0 if st.session_state.auth_action == "Conectare" else 1
+            )
+
     action = st.radio(
-        "Alegeți acțiunea:", ["Conectare", "Înregistrare"], horizontal=True
+        "Alegeți acțiunea:",
+        ["Conectare", "Înregistrare"],
+        horizontal=True,
+        index=st.session_state.auth_tab_index,
+        on_change=update_auth_tab,
+        key="auth_action",
     )
 
     if action == "Conectare":
         with st.form("login_form", clear_on_submit=False):
-            email = st.text_input("Email")
+            email = st.text_input("Email", key="login_email")
 
             parola = st.text_input(
                 "Parolă",
                 type="password",
+                key="login_parola",
             )
 
             # Adăugăm textul direct sub căsuța de parolă pentru a fi vizibil instant
@@ -379,7 +424,9 @@ def render_auth_page():
                 "💡 *Sfat: Apasă tasta ENTER după parolă pentru conectare rapidă, sau folosește butonul de mai jos.*"
             )
 
-            submit_login = st.form_submit_button("Conectează-te", type="primary")
+            submit_login = st.form_submit_button(
+                "Conectează-te", type="primary", key="login_submit"
+            )
 
         if submit_login:
             if not email or not parola:
@@ -399,11 +446,11 @@ def render_auth_page():
     else:
         with st.form("register_form", clear_on_submit=False):
             row1_col1, row1_col2 = st.columns(2)
-            nume = row1_col1.text_input("Nume")
-            prenume = row1_col2.text_input("Prenume")
+            nume = row1_col1.text_input("Nume", key="register_nume")
+            prenume = row1_col2.text_input("Prenume", key="register_prenume")
 
             row2_col1, row2_col2 = st.columns(2)
-            cnp = row2_col1.text_input("CNP")
+            cnp = row2_col1.text_input("CNP", key="register_cnp")
 
             data_nasterii = row2_col2.date_input(
                 "Data nașterii",
@@ -411,6 +458,7 @@ def render_auth_page():
                 max_value=datetime.date.today() - datetime.timedelta(days=3 * 365),
                 value=None,
                 format="DD/MM/YYYY",
+                key="register_data_nasterii",
             )
 
             row3_col1, row3_col2 = st.columns(2)
@@ -419,11 +467,14 @@ def render_auth_page():
                 ["M", "F"],
                 index=None,
                 placeholder="Alege o opțiune",
+                key="register_sex",
             )
-            email = row3_col2.text_input("Email")
+            email = row3_col2.text_input("Email", key="register_email")
 
-            parola = st.text_input("Parolă", type="password")
-            confirma_parola = st.text_input("Confirmă parola", type="password")
+            parola = st.text_input("Parolă", type="password", key="register_parola")
+            confirma_parola = st.text_input(
+                "Confirmă parola", type="password", key="register_confirma_parola"
+            )
 
             afectiuni_predefinite_dict = {
                 "Afecțiuni Cardiovasculare": [
@@ -487,15 +538,19 @@ def render_auth_page():
                 options=optiuni_multiselect,
                 placeholder="Alege o opțiune",
                 default=None,
+                key="register_afectiuni",
             )
 
             altele_input = ""
             if "Altele" in afectiuni_selectate:
                 altele_input = st.text_input(
-                    "Specificați afecțiunea (separate prin virgulă):"
+                    "Specificați afecțiunea (separate prin virgulă):",
+                    key="register_altele_input",
                 )
 
-            submit_register = st.form_submit_button("Creează cont", type="primary")
+            submit_register = st.form_submit_button(
+                "Creează cont", type="primary", key="register_submit"
+            )
 
         if submit_register:
             if not all(
@@ -566,7 +621,9 @@ pagina_evaluare = st.Page(
 pagina_istoric = st.Page(
     "views/istoric.py", title="Istoric medical", icon="📈", url_path="istoric"
 )
-pagina_profil = st.Page("views/profil.py", title="Profilul meu", icon="⚙️", url_path="profil")
+pagina_profil = st.Page(
+    "views/profil.py", title="Profilul meu", icon="⚙️", url_path="profil"
+)
 
 pagina_login = st.Page(
     render_auth_page, title="Autentificare", icon="🔒", url_path="login"

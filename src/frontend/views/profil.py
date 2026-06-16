@@ -10,7 +10,8 @@ project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from src.backend.db.db_connection import DatabaseConnection #noqa: E402
+from src.backend.db.db_connection import DatabaseConnection  # noqa: E402
+
 
 def get_db_connection():
     db_instance = DatabaseConnection()

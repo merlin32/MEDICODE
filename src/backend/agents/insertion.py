@@ -4,15 +4,15 @@ import re
 import sqlite3
 import sys
 
+from openai import OpenAI
+from src.backend.db.db_connection import DatabaseConnection
+
 # --- FIX PENTRU IMPORTURI ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 # ----------------------------
-
-from openai import OpenAI
-from src.backend.db.db_connection import DatabaseConnection
 
 client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
 MODEL_NAME = "hf.co/gguf-org/medgemma-1.5-4b-it-gguf:Q4_0"
