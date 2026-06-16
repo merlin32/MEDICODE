@@ -4,9 +4,7 @@ import re
 import base64
 import requests
 
-api_key = os.environ.get(
-    "GEMINI_API_KEY", ""
-)
+api_key = os.environ.get("GEMINI_API_KEY", "")
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
 
