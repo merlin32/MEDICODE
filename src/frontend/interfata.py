@@ -6,6 +6,9 @@ import sqlite3
 import streamlit as st
 import sys
 
+os.environ["FLAGS_enable_pir_api"] = "0"
+os.environ["FLAGS_use_mkldnn"] = "0"
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
 if project_root not in sys.path:
@@ -19,7 +22,6 @@ from src.backend.db.db_connection import (  # noqa: E402
 try:
     from streamlit_cookies_controller import CookieController  # type: ignore
 
-    # Adăugăm un "key" constant pentru a nu reseta componenta la refresh
     cookie_controller = CookieController(key="medicode_cookies")
 except ImportError:
     CookieController = None  # type: ignore
@@ -28,7 +30,7 @@ except ImportError:
 
 st.set_page_config(page_title="MEDICODE", page_icon="🏥", layout="centered")
 
-# --- CSS PENTRU ASCUNDEREA OPȚIUNII 'SELECT ALL' LA NIVEL GLOBAL ---
+
 st.markdown(
     """
     <style>
@@ -94,9 +96,6 @@ st.markdown(
 PBKDF2_ITERATIONS = 120_000
 
 
-# ==========================================
-# GESTIONAREA COOKIE-URILOR
-# ==========================================
 def set_cookie_and_reload(user_id):
     st.session_state.logout_requested = False
     st.session_state.authenticated = True
@@ -122,7 +121,6 @@ def clear_cookie_and_reload():
     st.session_state.page = "📄 Încărcare & Evaluare"
     st.query_params.clear()
 
-    # Activăm scutul: îi spune aplicației să șteargă cookie-ul imediat după repornire
     st.session_state.clear_cookie_on_next_run = True
 
     # Repornim instantaneu. Tranziția va fi invizibilă și fluidă.
@@ -153,9 +151,6 @@ def get_saved_user_id():
     return None
 
 
-# ==========================================
-# BAZA DE DATE & SCHEMĂ
-# ==========================================
 def get_db_connection():
     db_instance = DatabaseConnection()
     conn = db_instance.connection
@@ -333,11 +328,8 @@ def login_user(email, password):
     return True, user["id_utilizator"]
 
 
-# ==========================================
-# INTERFAȚĂ & SESIUNE
-# ==========================================
 def initialize_session_state():
-    # --- 1. Ștergere Cookie Amânată (Logout) ---
+    # 1. Ștergere Cookie Amânată (Logout)
     is_logging_out = st.session_state.get("clear_cookie_on_next_run", False)
     if is_logging_out:
         if cookie_controller:
@@ -347,7 +339,7 @@ def initialize_session_state():
                 pass
         st.session_state.clear_cookie_on_next_run = False
 
-    # --- 2. Scriere Cookie Amânată (Login - AICI REZOLVĂM PERSISTENȚA) ---
+    # 2. Scriere Cookie Amânată
     if "pending_cookie" in st.session_state:
         if cookie_controller:
             try:
@@ -358,7 +350,7 @@ def initialize_session_state():
                 pass
         del st.session_state["pending_cookie"]
 
-    # --- 3. Inițializare variabile default ---
+    # 3. Inițializare variabile default
     if "logout_requested" not in st.session_state:
         st.session_state.logout_requested = False
     if "authenticated" not in st.session_state:
@@ -370,7 +362,7 @@ def initialize_session_state():
     if "auth_tab_index" not in st.session_state:
         st.session_state.auth_tab_index = 0  # 0 = Conectare, 1 = Înregistrare
 
-    # --- 4. Verificare sesiune activă (Recuperare Cookie) ---
+    # 4. Verificare sesiune activă (Recuperare Cookie)
     if not st.session_state.authenticated and not st.session_state.logout_requested:
         if not is_logging_out:
             saved_id = get_saved_user_id()
@@ -607,14 +599,9 @@ def render_auth_page():
                 st.error(result)
 
 
-# ==========================================
-# DEFINIREA GLOBALĂ A PAGINILOR (INSTANȚE STABILE)
-# ==========================================
-
 current_dir = os.path.dirname(os.path.abspath(__file__))
 views_dir = os.path.join(current_dir, "views")
 
-# 2. Parametrul `url_path` este OBLIGATORIU aici pentru a preveni ecranul alb pe Windows!
 pagina_evaluare = st.Page(
     "views/evaluare.py", title="Încărcare & evaluare", icon="📄", url_path="evaluare"
 )
@@ -628,9 +615,7 @@ pagina_profil = st.Page(
 pagina_login = st.Page(
     render_auth_page, title="Autentificare", icon="🔒", url_path="login"
 )
-# ==========================================
-# PUNCTUL DE INTRARE PRINCIPAL (ROUTER MODERN)
-# ==========================================
+
 
 ensure_auth_schema()
 initialize_session_state()
@@ -647,12 +632,8 @@ if st.session_state.authenticated and st.session_state.current_user_id is not No
     current_user = st.session_state.current_user
     pagini_autentificate = [pagina_evaluare, pagina_istoric, pagina_profil]
 
-    # 2. Inițializăm navigația cu instanțele globale stabile
     nav = st.navigation(pagini_autentificate, position="hidden")
 
-    # =========================================
-    # CONSTRUIREA MANUALĂ A SIDEBAR-ULUI
-    # =========================================
     st.sidebar.markdown("### 👤 Utilizator curent")
     st.sidebar.success(
         f"{current_user.get('prenume', '')} {current_user.get('nume', '')}".strip()

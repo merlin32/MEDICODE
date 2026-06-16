@@ -105,9 +105,9 @@ def proceseaza_si_salveaza_buletin(
             unitate_masura = analiza_ocr.get("unitate_masura", "")
 
             # Preluare date extrase din buletinul de analize
-            ref_min = analiza_ocr.get("ref_min", 0.0)
-            ref_max = analiza_ocr.get("ref_max", 100.0)
-            is_bool = analiza_ocr.get("is_bool", 0)
+            ref_min = analiza_ocr.get("ref_min") or 0.0
+            ref_max = analiza_ocr.get("ref_max") or 100.0
+            is_bool = analiza_ocr.get("is_bool") or 0
 
             # 4.a) Verificare dacă biomarkerul există deja în Biomarkeri
             # Se verifică toate coloanele: nume_biomarker, ref_min, ref_max, is_bool
@@ -153,6 +153,9 @@ def proceseaza_si_salveaza_buletin(
                     "nume": nume_biomarker,
                     "valoare": valoare_masurata,
                     "unitate": unitate_masura,
+                    "min": ref_min,
+                    "max": ref_max,
+                    "is_bool": is_bool,
                 }
             )
 
