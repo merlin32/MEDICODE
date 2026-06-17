@@ -33,6 +33,7 @@ echo -e "${YELLOW}[PAS 3/5] Activăm mediul și verificăm pachetele...${NC}"
 source .venv/bin/activate
 
 echo -e "${YELLOW}[PAS 4/5] Instalăm librăriile necesare (din requirements.txt)...${NC}"
+python3 -m pip install --upgrade pip --quiet
 pip install -r requirements.txt --quiet
 
 echo -e "${YELLOW}[PAS 5/5] Verificăm modelul medical AI (MedGemma)...${NC}"
