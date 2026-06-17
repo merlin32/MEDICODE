@@ -37,7 +37,14 @@ def get_db_connection():
     return conn
 
 
+_DB_INITIALIZATA = False
+
+
 def ensure_auth_schema():
+    global _DB_INITIALIZATA
+    if _DB_INITIALIZATA:
+        return
+
     db_path = get_database_path()
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -120,12 +127,7 @@ def ensure_auth_schema():
         CREATE INDEX IF NOT EXISTS idx_clinici_analize ON Clinici(id_clinica);
         """
 
-        # Executescript execută toate comenzile separate prin punct și virgulă dintr-un singur bloc text
         conn.executescript(script_structura_completa)
-
-        # Mecanism de siguranță incremental (Hot-Fix):
-        # Dacă baza de date există deja, dar a fost creată de o versiune mai veche a aplicației,
-        # codul verifică și adaugă dinamic coloanele fără a afecta datele pacienților.
 
         columns_utilizatori = {
             row[1] for row in conn.execute("PRAGMA table_info(Utilizatori)").fetchall()
@@ -147,6 +149,7 @@ def ensure_auth_schema():
         print(
             "[✅] Arhitectura bazei de date MEDICODE a fost validată și inițializată cu succes."
         )
+        _DB_INITIALIZATA = True
 
     except Exception as e:
         print(f"[❌] Eroare critică la inițializarea structurii bazei de date: {e}")
@@ -212,9 +215,16 @@ def clear_cookie_and_reload():
     st.session_state.authenticated = False
     st.session_state.current_user_id = None
     st.session_state.current_user = None
-    st.session_state.page = "📄 Încărcare & Evaluare"
     st.query_params.clear()
     st.session_state.clear_cookie_on_next_run = True
+    st.session_state.logout_requested = True
+
+    if cookie_controller:
+        try:
+            cookie_controller.remove("medicode_user_id")
+        except Exception:
+            pass
+
     st.rerun()
 
 
@@ -296,7 +306,7 @@ def initialize_session_state():
     if is_logging_out:
         if cookie_controller:
             try:
-                cookie_controller.set("medicode_user_id", "", path="/")
+                cookie_controller.remove("medicode_user_id")
             except Exception:
                 pass
         st.session_state.clear_cookie_on_next_run = False
@@ -337,20 +347,13 @@ def render_auth_page():
         unsafe_allow_html=True,
     )
 
-    def update_auth_tab():
-        if "auth_action" in st.session_state:
-            st.session_state.auth_tab_index = (
-                0 if st.session_state.auth_action == "Conectare" else 1
-            )
-
     action = st.radio(
         "Alegeți acțiunea:",
         ["Conectare", "Înregistrare"],
         horizontal=True,
         index=st.session_state.auth_tab_index,
-        on_change=update_auth_tab,
-        key="auth_action",
     )
+    st.session_state.auth_tab_index = 0 if action == "Conectare" else 1
 
     if action == "Conectare":
         with st.form("login_form", clear_on_submit=False):
@@ -538,10 +541,14 @@ def render_auth_page():
 
             success, result = register_user(form_data)
             if success:
-                st.session_state.authenticated = True
-                st.session_state.current_user_id = result
-                st.session_state.current_user = dict(get_user_by_id(result))
-                st.session_state.logout_requested = False
-                set_cookie_and_reload(result)
+                st.success(
+                    "✅ Contul a fost creat cu succes! Te redirecționăm la Conectare..."
+                )
+                import time
+
+                time.sleep(5)
+
+                st.session_state.auth_tab_index = 0
+                st.rerun()
             else:
                 st.error(result)

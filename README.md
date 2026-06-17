@@ -33,3 +33,33 @@ Modul de operare al ecosistemului Medicode este împărțit în trei mari piloni
 * **Dashboard-ul Interactiv:** Afișează istoricul cronologic al sesiunilor de analize și evoluția biomarkerilor prin grafice de trend.
 * **Sistemul de Alerte Vizuale:** Semnalizează instant fluctuațiile critice dintre sesiuni (de exemplu: o scădere drastică în greutate sau un biomarker care trece brusc din zona sigură în zona roșie de risc).
 * **Generarea de Rapoarte:** Aplicația livrează un raport vizual (pentru pacient), simplificat, axat pe lifestyle și recomandări.
+
+---
+
+## 3. Instalare și Rulare (Instrucțiuni pentru Utilizator)
+
+Aplicația este concepută pentru a fi de tip "Plug & Play", configurându-se automat fără a necesita cunoștințe tehnice avansate din partea utilizatorului. 
+
+**Pregătire inițială:**
+* Descărcați întregul folder al aplicației pe calculatorul dumneavoastră și dezarhivați-l (dacă este în format ZIP).
+* Asigurați-vă că aveți o conexiune stabilă la internet (necesară doar la prima rulare pentru descărcarea modelelor AI).
+
+### 🪟 Pentru utilizatorii de Windows:
+1. Intrați în folderul principal al proiectului.
+2. Dați dublu-click pe fișierul **`Start_Medicode.bat`**.
+3. **Gata!** La prima rulare, o fereastră neagră va apărea pe ecran și va instala automat tot sistemul (Python, motorul local AI Ollama și va descărca modelul medical securizat MedGemma de 2.8 GB). Acest proces poate dura câteva minute.
+4. Odată finalizat, aplicația MEDICODE se va deschide automat în browserul dumneavoastră web.
+
+### 🍏🐧 Pentru utilizatorii de macOS / Linux:
+1. Deschideți aplicația **Terminal** și navigați către folderul principal al proiectului (ex: `cd /Calea/Catre/Medicode`).
+2. Oferiți permisiunea de rulare a scriptului de instalare tastând această comandă (necesar doar o singură dată):
+```bash
+   chmod +x Start_Medicode.sh
+   ```
+3. Porniți aplicația tastând:
+```bash
+   ./Start_Medicode.sh
+   ```
+4. Sistemul va configura automat mediul și va descărca fișierele necesare, după care platforma se va deschide direct în browser.
+
+*(Notă: Pentru a opri aplicația, trebuie doar să închideți fereastra terminalului pe care scrie "MEDICODE" sau să apăsați tastele `CTRL+C` în interiorul acelui terminal).*

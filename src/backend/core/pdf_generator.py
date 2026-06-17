@@ -5,6 +5,9 @@ from fpdf import FPDF, XPos, YPos
 
 def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
     text_ai = text_ai.replace("µ", "u").replace("\xb5", "u")
+    emoticoane_de_sters = ["⚠️", "🧬", "📋", "✅", "🚨", "🩺"]
+    for emoji in emoticoane_de_sters:
+        text_ai = text_ai.replace(emoji, "")
 
     pdf = FPDF()
     pdf.add_page()
@@ -19,13 +22,12 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
     font_bold = os.path.join(frontend_dir, "fonts", "PlayfairDisplay-Bold.ttf")
     font_italic = os.path.join(frontend_dir, "fonts", "PlayfairDisplay-Italic.ttf")
 
-    # Am eliminat parametrul 'uni=True' deoarece fpdf2 suportă caracterele speciale nativ
     pdf.add_font("PlayfairDisplay", "", font_regular)
     pdf.add_font("PlayfairDisplay", "B", font_bold)
     pdf.add_font("PlayfairDisplay", "I", font_italic)
     font_family = "PlayfairDisplay"
 
-    # --- ANTET ---
+    # ANTET
     pdf.set_fill_color(41, 128, 185)
     pdf.rect(0, 0, 210, 30, "F")
 
@@ -43,9 +45,15 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
 
     pdf.set_font(font_family, "", 12)
     pdf.set_xy(35, 18)
-    pdf.cell(0, 10, "Raport Medical Generat de Inteligența Artificială", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(
+        0,
+        10,
+        "Raport Medical Generat de Inteligența Artificială",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+    )
 
-    # --- DATE PACIENT ---
+    # DATE PACIENT
     pdf.set_y(35)
     pdf.set_text_color(44, 62, 80)
     pdf.set_font(font_family, "B", 11)
@@ -80,19 +88,18 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
 
     pdf.ln(10)
 
-    # --- TEXT AI ---
+    # TEXT AI
     pdf.set_text_color(0, 0, 0)
     pdf.set_font(font_family, size=11)
     text_curat = str(text_ai).encode("utf-8", errors="ignore").decode("utf-8")
 
-    # Textul va fi justificat (align="J")
     try:
         pdf.multi_cell(0, 6, text_curat, align="J", markdown=True)
     except TypeError:
         # Fallback de siguranță în caz că versiunea de fpdf2 este mai veche
         pdf.multi_cell(0, 6, text_curat, align="J")
 
-    # --- DISCLAIMER ---
+    # DISCLAIMER
     pdf.ln(15)
     pdf.set_text_color(127, 140, 141)
     pdf.set_font(font_family, "I", 9)

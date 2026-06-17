@@ -1,7 +1,12 @@
+hypothesis==6.152.4
 numpy==1.26.4
 paddleocr==2.8.1
 pandas==3.0.2
 pypdfium2==5.7.1
+pytest-cov
+pytest==9.0.3
+ruff
+black
 streamlit==1.58.0
 streamlit-cookies-controller==0.0.4
 paddlepaddle==2.6.2

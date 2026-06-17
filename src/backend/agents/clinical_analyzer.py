@@ -5,12 +5,10 @@ import sqlite3
 import requests
 import datetime
 
-# --- FIX PENTRU IMPORTURI ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-# ----------------------------
 
 from src.backend.db.db_connection import DatabaseConnection  # noqa: E402
 
@@ -111,7 +109,7 @@ def ruleaza_analiza_avansata(
     REGULI STRICTE DE REDACTARE:
     1. TON ȘI FORMĂ: Scrie în limba română impecabilă, naturală și caldă, la persoana a II-a de politețe. Începe cu "Bună ziua, domnule/doamnă {nume_pacient}". FĂRĂ emoji-uri (deoarece PDF-ul nu le poate randa).
     2. EVIDENȚIEREA ANOMALIILOR: Când analizezi un biomarker care se află în afara intervalului de referință (sau la limită), ești OBLIGAT să îl scrii cu MAJUSCULE, între asteriscuri (pentru bold) și să adaugi eticheta vizuală [⚠️ ATENȚIE - VALOARE MODIFICATĂ]. 
-       Exemplu: **SIDEREMIE [⚠️ ATENȚIE - VALOARE MODIFICATĂ]**.
+       Exemplu: **SIDEREMIE [ATENȚIE - VALOARE MODIFICATĂ]**.
     3. SECȚIUNEA '🧬 ANALIZĂ ȘI CORELĂRI': Trebuie să fie foarte detaliată și personalizată. Explică biomarkerii anormali grupat (nu liste separate). Corelează imediat aceste valori modificate cu afecțiunile din Dosarul Medical ({text_afectiuni}). Dacă există riscul de a dezvolta alte afecțiuni (ex: pre-diabet, anemie cronică) din cauza acestor anomalii, explică clar și pe larg mecanismul.
     4. SECȚIUNEA '📋 RECOMANDĂRI': Trebuie să fie exhaustivă. Oferă sfaturi amănunțite despre: dietă (alimente de evitat/consumat), stil de viață (activitate fizică, somn) și care sunt pașii medicali următori (ce specialist ar trebui să consulte).
     5. FĂRĂ INFORMAȚII REDUNDANTE: Nu crea secțiuni separate de "Valori" și "Corelări", îmbină-le într-o singură poveste clinică. Fără textul de disclaimer la final (este adăugat de noi automat).
@@ -127,9 +125,7 @@ def ruleaza_analiza_avansata(
             {"role": "user", "content": prompt_complex},
         ],
         "stream": False,
-        "options": {
-            "temperature": 0.4
-        },  # Ușor crescută pentru a-i da voie să fie mai descriptiv și fluent
+        "options": {"temperature": 0.4},
     }
 
     try:
@@ -145,26 +141,23 @@ def ruleaza_analiza_avansata(
 
 
 def normalizeaza_termen_medical(termen_brut: str) -> str:
-    print(f"[🤖] Standardizăm termenul medical: {termen_brut}...")
+    print(f"[🤖] Standardizăm termenul și generăm descrierea: {termen_brut}...")
 
-    # Am eliminat mențiunea negativă despre <think> care îl deruta și am impus un output strict
+    # Cerem AI-ului să returneze ambele informații structurate JSON
     prompt = f"""
-    Ești un medic expert în terminologia clinică.
-    Standardizează afecțiunea pacientului într-un singur diagnostic medical oficial, concis, în limba română.
-    
-    Exemple de normalizare:
-    - "diabet tip 2" -> "Diabet Zaharat Tip 2"
-    - "tensiune mare" -> "Hipertensiune Arterială"
-    - "RACEALA" -> "Infecție de tract respirator superior"
-    - "durere de cap" -> "Cefalee"
-    - "colesterol marit" -> "Hipercolesterolemie"
+    Ești un medic expert. Standardizează afecțiunea pacientului într-un singur diagnostic medical oficial, concis, în limba română.
+    De asemenea, generează o descriere generală a acestei afecțiuni (2-3 propoziții clare, pe înțelesul pacientului).
     
     Termen introdus de pacient: "{termen_brut}"
     
     REGULI STRICTE: 
-    1. Returnează STRICT numele oficial al afecțiunii pe un singur rând.
-    2. Fără alte explicații, introduceri, pași de gândire sau punct la final.
-    3. Doar diagnosticul, capitalizat corect.
+    1. Returnează STRICT un obiect JSON valid, fără niciun alt text înainte sau după.
+    2. Fără caractere '*' (asterisc) și fără formatare markdown.
+    3. Folosește exact această structură:
+    {{
+        "diagnostic": "Numele Oficial",
+        "descriere": "Descrierea afecțiunii..."
+    }}
     """
 
     payload = {
@@ -172,48 +165,56 @@ def normalizeaza_termen_medical(termen_brut: str) -> str:
         "messages": [
             {
                 "role": "system",
-                "content": "Ești un API de normalizare. Răspunzi doar cu diagnosticul standardizat, nimic altceva.",
+                "content": "Răspunzi exclusiv cu obiectul JSON solicitat, fără tag-uri de gândire.",
             },
             {"role": "user", "content": prompt},
         ],
         "stream": False,
-        "options": {
-            "temperature": 0.0  # Setăm temperatura la absolut zero pentru a opri halucinațiile
-        },
+        "options": {"temperature": 0.1},
     }
 
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=30)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=120)
         if response.status_code == 200:
             raspuns_brut = response.json()["message"]["content"]
 
-            # --- NOUA LOGICĂ INFAILIBILĂ DE CURĂȚARE ---
-            # 1. Dacă a pus ambele tag-uri, luăm ce e DUPĂ tag-ul de închidere
             if "</think>" in raspuns_brut:
-                raspuns_curat = raspuns_brut.split("</think>")[-1]
-            # 2. Dacă a deschis tag-ul dar a uitat să îl închidă (eroarea ta curentă), luăm doar ultima linie de text!
-            elif "<think>" in raspuns_brut:
-                linii = [
-                    linie.strip() for linie in raspuns_brut.split("\n") if linie.strip()
-                ]
-                raspuns_curat = linii[-1] if linii else termen_brut
-            else:
-                raspuns_curat = raspuns_brut
+                raspuns_brut = raspuns_brut.split("</think>")[-1]
 
-            # 3. Curățare finală de caractere și cuvinte parazit adăugate de model ("Yes.", "Da.")
-            raspuns_curat = re.sub(
-                r"^(Yes\.|Da\.|Answer:)\s*",
-                "",
-                raspuns_curat.strip(),
-                flags=re.IGNORECASE,
+            raspuns_curat = (
+                raspuns_brut.replace("*", "")
+                .replace("```json", "")
+                .replace("```", "")
+                .strip()
             )
-            raspuns_curat = raspuns_curat.strip("'\". \n\t")
 
-            # 4. Fallback de siguranță: dacă rezultatul e prea lung (a eșuat complet), returnăm termenul original
-            if not raspuns_curat or len(raspuns_curat) > 50:
+            import json
+
+            try:
+                match = re.search(r"\{.*\}", raspuns_curat, re.DOTALL)
+                if match:
+                    raspuns_curat = match.group(0)
+
+                date_json = json.loads(raspuns_curat)
+                diagnostic_final = date_json.get(
+                    "diagnostic", termen_brut.strip().capitalize()
+                )
+                descriere_finala = date_json.get("descriere", "")
+
+                if descriere_finala:
+                    db_conn = DatabaseConnection().connection
+                    db_conn.execute(
+                        "INSERT INTO Afectiuni (nume_afectiune, descriere_generala) VALUES (?, ?) "
+                        "ON CONFLICT(nume_afectiune) DO UPDATE SET descriere_generala = ?",
+                        (diagnostic_final, descriere_finala, descriere_finala),
+                    )
+                    db_conn.commit()
+
+                return diagnostic_final
+
+            except json.JSONDecodeError:
+                print(f"[❌] Eroare parsare JSON. Răspuns AI: {raspuns_curat}")
                 return termen_brut.strip().capitalize()
-
-            return raspuns_curat
         else:
             return termen_brut.strip().capitalize()
     except Exception as e:

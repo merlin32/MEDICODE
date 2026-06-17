@@ -1,12 +1,14 @@
 import os
 import re
+import tempfile
 import pdfplumber
 from paddleocr import PaddleOCR
+
+from src.backend.core.image_processor import curata_imagine_pentru_ocr
 
 os.environ["FLAGS_enable_pir_api"] = "0"
 os.environ["FLAGS_use_mkldnn"] = "0"
 
-# Inițializăm OCR-ul local doar în caz de nevoie
 print("[0/3] Incarcare modele locale PaddleOCR (pentru Fallback)...")
 ocr = PaddleOCR(use_angle_cls=True, lang="ro")
 
@@ -28,31 +30,46 @@ def extrage_text_nativ_pdf(cale_pdf):
 def extrage_text_cu_paddle_local(cale_imagine):
     """Fallback 1: Trage textul din poză offline dacă AI-ul pică."""
     text_brut = ""
-    res = ocr.ocr(cale_imagine)
-    if res and res[0] is not None:
-        cutii = []
-        for linie in res[0]:
-            coords = linie[0]
-            cutii.append(
-                {
-                    "y": sum(p[1] for p in coords) / 4.0,
-                    "x": min(p[0] for p in coords),
-                    "text": linie[1][0],
-                }
-            )
 
-        if cutii:
-            cutii = sorted(cutii, key=lambda c: c["y"])
-            randuri = [[cutii[0]]]
-            for c in cutii[1:]:
-                if abs(c["y"] - randuri[-1][-1]["y"]) < 10:
-                    randuri[-1].append(c)
-                else:
-                    randuri.append([c])
+    print(f"[⚙️ OCR Local] Aplicăm filtre optice pe: {cale_imagine}...")
 
-            for rand in randuri:
-                rand = sorted(rand, key=lambda c: c["x"])
-                text_brut += " ".join(c["text"].strip() for c in rand) + "\n"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+        cale_curatata = tmp.name
+
+    try:
+        curata_imagine_pentru_ocr(cale_imagine, cale_curatata)
+
+        res = ocr.ocr(cale_curatata)
+
+        if res and res[0] is not None:
+            cutii = []
+            for linie in res[0]:
+                coords = linie[0]
+                cutii.append(
+                    {
+                        "y": sum(p[1] for p in coords) / 4.0,
+                        "x": min(p[0] for p in coords),
+                        "text": linie[1][0],
+                    }
+                )
+
+            if cutii:
+                cutii = sorted(cutii, key=lambda c: c["y"])
+                randuri = [[cutii[0]]]
+                for c in cutii[1:]:
+                    if abs(c["y"] - randuri[-1][-1]["y"]) < 10:
+                        randuri[-1].append(c)
+                    else:
+                        randuri.append([c])
+
+                for rand in randuri:
+                    rand = sorted(rand, key=lambda c: c["x"])
+                    text_brut += " ".join(c["text"].strip() for c in rand) + "\n"
+
+    finally:
+        if os.path.exists(cale_curatata):
+            os.remove(cale_curatata)
+
     return text_brut
 
 
@@ -85,7 +102,7 @@ def extrage_date_structurate_local(text_brut):
             ref_max = float(m_range.group(2).replace(",", "."))
             left_part = linie[: m_range.start()] + linie[m_range.end() :]
         else:
-            continue  # Pentru fallback local, dacă n-are referință sigură, îl sărim
+            continue
 
         tokens = left_part.split()
         val_idx, valoare_num = -1, None

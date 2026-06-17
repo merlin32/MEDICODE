@@ -67,7 +67,9 @@ def initializare_automata_ai_local():
 
         # 4. Pull model if not present
         if not ollama_bin:
-            print("⚠️ Ollama rulează dar nu poate fi apelat prin subprocess (nu e în PATH).")
+            print(
+                "⚠️ Ollama rulează dar nu poate fi apelat prin subprocess (nu e în PATH)."
+            )
             return
 
         try:
@@ -90,6 +92,7 @@ def initializare_automata_ai_local():
     # Run entirely in background — don't block the UI thread
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
+
 
 initializare_automata_ai_local()
 

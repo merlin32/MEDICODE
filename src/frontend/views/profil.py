@@ -3,8 +3,6 @@ import sqlite3
 import sys
 import os
 
-# Acest bloc trebuie să fie prezent în FIECARE fișier din folderul "pages/"
-# pentru ca acestea să poată vedea codul din "src/backend/"
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
 if project_root not in sys.path:
@@ -56,8 +54,6 @@ if not cheie_curenta:
         3. Apasă pe **Create API key**.
         4. Copiază cheia și introdu-o în caseta de mai jos.
         """)
-else:
-    st.success("✅ Cheia API este configurată și pregătită pentru analiză.")
 
 with st.form("form_api_key"):
     noua_cheie = st.text_input(
@@ -78,6 +74,9 @@ with st.form("form_api_key"):
             st.rerun()
         else:
             st.error("Introdu o cheie validă.")
+
+if cheie_curenta:
+    st.success("✅ Cheia API este configurată și pregătită pentru analiză.")
 
 
 st.markdown("---")
@@ -195,7 +194,6 @@ with st.expander("➕ Înregistrează o afecțiune nouă în istoric"):
     for boli_din_categorie in afectiuni_sugerate.values():
         lista_plata_afectiuni.extend(boli_din_categorie)
 
-    # Opțional, dar recomandat: sortăm lista alfabetic pentru o căutare mai ușoară
     lista_plata_afectiuni.sort()
 
     # 2. Unim opțiunea manuală cu lista plată generată
@@ -231,43 +229,45 @@ with st.expander("➕ Înregistrează o afecțiune nouă în istoric"):
             st.error("Vă rugăm să selectați statusul clinic.")
         else:
             nume_af_curat = nume_afectiune_final.strip()
-            # (Presupunând că variabila ta se numește nume_af_curat)
-        if nume_af_curat:
-            # 1. Trecem termenul prin AI pentru standardizare (Afișăm spinner vizual pacientului)
-            with st.spinner(
-                "🧠 AI-ul standardizează diagnosticul în terminologia medicală..."
-            ):
-                nume_af_curat = normalizeaza_termen_medical(nume_af_curat)
 
-            # 2. Verificăm în baza de date (cu numele gata normalizat)
-            exista_deja = conn.execute(
-                "SELECT status FROM Utilizator_Afectiune WHERE id_utilizator = ? AND nume_afectiune = ?",
-                (id_user, nume_af_curat),
-            ).fetchone()
+            if nume_af_curat:
+                # 1. Trecem termenul prin AI pentru standardizare
+                with st.spinner(
+                    "🧠 AI-ul standardizează diagnosticul în terminologia medicală..."
+                ):
+                    nume_af_curat = normalizeaza_termen_medical(nume_af_curat)
 
-            if exista_deja and exista_deja["status"] == stare_af:
-                st.error(
-                    f"Afecțiunea '{nume_af_curat}' figurează deja cu statusul '{stare_af}'!"
-                )
-            else:
-                # 3. Inserăm în tabelul catalog (Afectiuni) dacă e boală nouă
-                conn.execute(
-                    "INSERT OR IGNORE INTO Afectiuni (nume_afectiune) VALUES (?)",
-                    [nume_af_curat],
-                )
-                # 4. Facem legătura pacient-boală
-                if exista_deja:
-                    conn.execute(
-                        "UPDATE Utilizator_Afectiune SET status = ? WHERE id_utilizator = ? AND nume_afectiune = ?",
-                        (stare_af, id_user, nume_af_curat),
+                # 2. Verificăm în baza de date
+                exista_deja = conn.execute(
+                    "SELECT status FROM Utilizator_Afectiune WHERE id_utilizator = ? AND nume_afectiune = ?",
+                    (id_user, nume_af_curat),
+                ).fetchone()
+
+                if exista_deja and exista_deja["status"] == stare_af:
+                    st.error(
+                        f"Afecțiunea '{nume_af_curat}' figurează deja cu statusul '{stare_af}'!"
                     )
                 else:
+                    # 3. Inserăm în catalog
                     conn.execute(
-                        "INSERT INTO Utilizator_Afectiune (id_utilizator, nume_afectiune, status) VALUES (?, ?, ?)",
-                        (id_user, nume_af_curat, stare_af),
+                        "INSERT OR IGNORE INTO Afectiuni (nume_afectiune) VALUES (?)",
+                        [nume_af_curat],
                     )
-                conn.commit()
-                st.success(f"Afecțiunea '{nume_af_curat}' a fost adăugată la dosar!")
-                st.rerun()
-        else:
-            st.error("Numele afecțiunii nu poate fi lăsat gol.")
+                    # 4. Facem legătura pacient-boală
+                    if exista_deja:
+                        conn.execute(
+                            "UPDATE Utilizator_Afectiune SET status = ? WHERE id_utilizator = ? AND nume_afectiune = ?",
+                            (stare_af, id_user, nume_af_curat),
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT INTO Utilizator_Afectiune (id_utilizator, nume_afectiune, status) VALUES (?, ?, ?)",
+                            (id_user, nume_af_curat, stare_af),
+                        )
+                    conn.commit()
+                    st.success(
+                        f"Afecțiunea '{nume_af_curat}' a fost adăugată la dosar!"
+                    )
+                    st.rerun()
+            else:
+                st.error("Numele afecțiunii nu poate fi lăsat gol.")
