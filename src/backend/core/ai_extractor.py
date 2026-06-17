@@ -3,8 +3,18 @@ import json
 import re
 import base64
 import requests
+import streamlit as st
 
-api_key = os.environ.get("GEMINI_API_KEY", "")
+cheie_sesiune = st.session_state.current_user.get("cheie_api_gemini", "")
+api_key = os.environ.get("GEMINI_API_KEY", cheie_sesiune)
+
+if not api_key:
+    st.error(
+        "❌ Eroare: Sistemul OCR nu poate funcționa. Nu a fost găsită nicio cheie API Gemini."
+    )
+    st.info("💡 Te rugăm să mergi în pagina 'Profilul meu' și să îți salvezi cheia.")
+    st.stop()  # Această comandă oprește instant execuția scriptului în acest punct
+
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
 

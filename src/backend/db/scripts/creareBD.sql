@@ -22,6 +22,7 @@ CREATE TABLE Utilizatori (
     sex TEXT NOT NULL CHECK (sex IN ('F', 'M')),
     data_nasterii DATE NOT NULL,
     parola_hash TEXT NOT NULL
+    cheie_api_gemini TEXT
 );
 
 -- Tabel Analize (Sesiuni)
@@ -32,6 +33,7 @@ CREATE TABLE Analize (
     data_recoltare DATE NOT NULL,
     upload_hash TEXT,
     finalizata INTEGER DEFAULT 0,
+    raport_text TEXT,
     FOREIGN KEY (id_utilizator) REFERENCES Utilizatori(id_utilizator) ON DELETE CASCADE,
     FOREIGN KEY (id_clinica) REFERENCES Clinici(id_clinica)
 );

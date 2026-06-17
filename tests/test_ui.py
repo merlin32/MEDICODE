@@ -9,7 +9,7 @@ def test_afisare_pagina_autentificare():
     at.session_state["current_user"] = None
     at.session_state["current_user_id"] = None
     at.session_state["logout_requested"] = True
-    at = at.run()
+    at = at.run(timeout=15)
 
     assert at.title[0].value == "🏥 MEDICODE"
     assert at.subheader[0].value == "Autentificare pacient"

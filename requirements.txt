@@ -16,3 +16,4 @@ requests
 pdfplumber
 opencv-python
 Pillow
+pypdfium2==5.7.1

@@ -1,7 +1,9 @@
-import json
 import os
 import re
 import sys
+import sqlite3
+import requests
+import datetime
 
 # --- FIX PENTRU IMPORTURI ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -10,109 +12,210 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 # ----------------------------
 
-from openai import OpenAI  # noqa: E402
 from src.backend.db.db_connection import DatabaseConnection  # noqa: E402
 
-client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
 MODEL_NAME = "hf.co/gguf-org/medgemma-1.5-4b-it-gguf:Q4_0"
+OLLAMA_URL = "http://localhost:11434/api/chat"
 
 
-def cauta_clinica_si_intervale_sql(text_ocr: str):
-    """Interogare SQL pură pentru a găsi datele clinicii."""
-    conn = DatabaseConnection().get_connection()
+def ruleaza_analiza_avansata(
+    pacient_id: int, id_sesiune: int, greutate: float, inaltime: float
+) -> str:
+    print(f"[🤖] Construim contextul clinic avansat pentru sesiunea {id_sesiune}...")
+
+    db = DatabaseConnection()
+    conn = db.connection
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT id, nume_clinica FROM clinici")
-        clinici = cursor.fetchall()
-        for clinica_id, nume in clinici:
-            if nume.lower() in text_ocr.lower():
-                cursor.execute(
-                    """
-                    SELECT biomarker, interval_minim, interval_maxim, unitate_masura 
-                    FROM intervale_referinta_clinica WHERE clinica_id = ?
-                """,
-                    (clinica_id,),
-                )
-                return {r[0]: f"{r[1]}-{r[2]} {r[3]}" for r in cursor.fetchall()}
-    except Exception:
-        pass
-    return None
 
-
-def ruleaza_analiza_clinica(pacient_id: int, text_ocr: str) -> str:
-    print("[🤖] MedGemma analizează datele brute...")
-
-    # PASUL 1: Solicităm AI-ului să decidă dacă are nevoie de baza de date
-    # Folosim un prompt care forțează modelul să ceară date dacă nu le are
-    prompt_initial = f"""
-    Sunteți un medic expert. Analizați textul de mai jos extras dintr-un buletin de analize.
-    Dacă textul NU conține intervale de referință clare pentru toți biomarkerii, răspundeți EXACT cu textul: SEARCH_DATABASE
-    Dacă aveți deja toate informațiile, generați direct raportul clinic.
-
-    TEXT ANALIZE:
-    {text_ocr}
-    """
-
-    response = client.chat.completions.create(
-        model=MODEL_NAME, messages=[{"role": "user", "content": prompt_initial}]
+    # 1. Preluăm datele demografice (INCLUSIV Nume și Prenume)
+    cursor.execute(
+        "SELECT nume, prenume, sex, data_nasterii FROM Utilizatori WHERE id_utilizator = ?",
+        (pacient_id,),
     )
+    user_row = cursor.fetchone()
 
-    decizie_ai = response.choices[0].message.content
+    sex_biologic = "Nespecificat"
+    varsta = "Nespecificată"
+    nume_pacient = "pacient"
 
-    # PASUL 2: Logica de "Manual Tool Calling"
-    context_suplimentar = ""
-    if "SEARCH_DATABASE" in decizie_ai or "search_database" in decizie_ai:
-        print("[🛠️] MedGemma a solicitat acces la baza de date SQL...")
-        date_db = cauta_clinica_si_intervale_sql(text_ocr)
+    if user_row:
+        nume_pacient = f"{user_row['prenume']} {user_row['nume']}"
+        sex_biologic = "Masculin" if user_row["sex"] == "M" else "Feminin"
+        if user_row["data_nasterii"]:
+            try:
+                data_nas = datetime.datetime.strptime(
+                    user_row["data_nasterii"], "%Y-%m-%d"
+                ).date()
+                azi = datetime.date.today()
+                varsta = (
+                    azi.year
+                    - data_nas.year
+                    - ((azi.month, azi.day) < (data_nas.month, data_nas.day))
+                )
+            except Exception as e:
+                print(f"[⚠️] Eroare la calculul vârstei: {e}")
 
-        if date_db:
-            print("[✅] Date găsite în cache-ul SQL.")
-            context_suplimentar = f"\nDATE DIN BAZA DE DATE (INTERVALE DE REFERINȚĂ): {json.dumps(date_db)}"
+    # 2. Preluăm biomarkerii
+    cursor.execute(
+        """
+        SELECT b.nume_biomarker, vm.val_mas, vm.unit_mas, b.ref_min, b.ref_max, b.is_bool
+        FROM Valori_Masurate vm
+        JOIN Biomarkeri b ON vm.id_biomarker = b.id_biomarker
+        WHERE vm.id_sesiune = ?
+    """,
+        (id_sesiune,),
+    )
+    randuri_analize = cursor.fetchall()
+
+    # 3. Preluăm afecțiunile curente
+    cursor.execute(
+        "SELECT nume_afectiune, status FROM Utilizator_Afectiune WHERE id_utilizator = ?",
+        (pacient_id,),
+    )
+    randuri_afectiuni = cursor.fetchall()
+
+    # 4. Formatăm biomarkerii
+    text_biomarkeri = ""
+    for r in randuri_analize:
+        if r["is_bool"] == 1:
+            val_status = "Pozitiv/DA" if r["val_mas"] == 1.0 else "Negativ/NU"
+            ref_status = "Pozitiv/DA" if r["ref_min"] == 1.0 else "Negativ/NU"
+            text_biomarkeri += (
+                f"- {r['nume_biomarker']}: {val_status} (Referință: {ref_status})\n"
+            )
         else:
-            print("[⚠️] Clinica nu a fost găsită în baza de date.")
-            context_suplimentar = "\nNOTĂ: Clinica nu este în baza de date. Folosește-ți cunoștințele medicale generale pentru intervale standard."
+            text_biomarkeri += f"- {r['nume_biomarker']}: {r['val_mas']} {r['unit_mas']} (Referință: {r['ref_min']} - {r['ref_max']})\n"
 
-    # PASUL 3: Generarea raportului final cu toate datele la un loc
-    print("[🩺] Generare raport clinic final...")
-    prompt_final = f"""
-    Pe baza acestor date, generează un raport clinic structurat sub formă de tabel (Biomarker, Valoare, Stare, Concluzie).
-    
-    REGULI STRICTE:
-    1. Răspunde DIRECT cu raportul final în limba română.
-    2. NU afișa procesul tău de gândire.
-    3. NU folosi cuvinte precum "thought", "Here is the thinking process", etc.
-    4. Începe direct cu tabelul sau cu salutul medical.
-    
-    DATE OCR: {text_ocr}
-    {context_suplimentar}
+    text_afectiuni = "\n".join(
+        [f"- {af['nume_afectiune']}" for af in randuri_afectiuni]
+    )
+    imc = greutate / ((inaltime / 100) ** 2) if inaltime > 0 else 0.0
+
+    # 5. Mega-Prompt-ul Complet Revizuit
+    prompt_complex = f"""
+    Sunteți MEDICODE, un asistent medical AI empatic și supraspecializat. Te rog să analizezi aceste rezultate pentru a-l ajuta pe pacient să înțeleagă mai bine starea sa de sănătate.
+
+    CONTEXT PACIENT:
+    - Nume: {nume_pacient}
+    - Sex biologic: {sex_biologic}
+    - Vârstă: {varsta} ani
+    - IMC: {imc:.2f}
+
+    DOSAR MEDICAL (Afecțiuni cunoscute):
+    {text_afectiuni if text_afectiuni else "Fără istoric de afecțiuni."}
+
+    REZULTATE ANALIZE:
+    {text_biomarkeri}
+
+    REGULI STRICTE DE REDACTARE:
+    1. TON ȘI FORMĂ: Scrie în limba română impecabilă, naturală și caldă, la persoana a II-a de politețe. Începe cu "Bună ziua, domnule/doamnă {nume_pacient}". FĂRĂ emoji-uri (deoarece PDF-ul nu le poate randa).
+    2. EVIDENȚIEREA ANOMALIILOR: Când analizezi un biomarker care se află în afara intervalului de referință (sau la limită), ești OBLIGAT să îl scrii cu MAJUSCULE, între asteriscuri (pentru bold) și să adaugi eticheta vizuală [⚠️ ATENȚIE - VALOARE MODIFICATĂ]. 
+       Exemplu: **SIDEREMIE [⚠️ ATENȚIE - VALOARE MODIFICATĂ]**.
+    3. SECȚIUNEA '🧬 ANALIZĂ ȘI CORELĂRI': Trebuie să fie foarte detaliată și personalizată. Explică biomarkerii anormali grupat (nu liste separate). Corelează imediat aceste valori modificate cu afecțiunile din Dosarul Medical ({text_afectiuni}). Dacă există riscul de a dezvolta alte afecțiuni (ex: pre-diabet, anemie cronică) din cauza acestor anomalii, explică clar și pe larg mecanismul.
+    4. SECȚIUNEA '📋 RECOMANDĂRI': Trebuie să fie exhaustivă. Oferă sfaturi amănunțite despre: dietă (alimente de evitat/consumat), stil de viață (activitate fizică, somn) și care sunt pașii medicali următori (ce specialist ar trebui să consulte).
+    5. FĂRĂ INFORMAȚII REDUNDANTE: Nu crea secțiuni separate de "Valori" și "Corelări", îmbină-le într-o singură poveste clinică. Fără textul de disclaimer la final (este adăugat de noi automat).
     """
 
-    final_res = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [
             {
                 "role": "system",
-                "content": "Ești un medic specialist de elită. Ești scurt, la obiect și nu îți expui procesul de gândire pacienților.",
+                "content": "Ești un medic expert, detaliat și extrem de corect gramatical. Nu afișa tag-uri <think>.",
             },
-            {"role": "user", "content": prompt_final},
+            {"role": "user", "content": prompt_complex},
         ],
-    )
+        "stream": False,
+        "options": {
+            "temperature": 0.4
+        },  # Ușor crescută pentru a-i da voie să fie mai descriptiv și fluent
+    }
 
-    raspuns_brut = final_res.choices[0].message.content
-
-    # --- FILTRU DE SIGURANȚĂ (Post-procesare) ---
-
-    # 1. Eliminăm eventualele tag-uri de <think>...</think> dacă modelul le folosește
-    raspuns_curat = re.sub(r"<think>.*?</think>", "", raspuns_brut, flags=re.DOTALL)
-
-    # 2. Dacă modelul tot returnează blocul text "thought... OK.", tăiem tot până la cuvântul cheie de start (sau tabel)
-    if "thought" in raspuns_curat.lower()[:50] and "OK." in raspuns_curat:
-        # Păstrăm doar ce este după "OK." (finalul raționamentului în cazul tău)
-        raspuns_curat = raspuns_curat.split("OK.", 1)[-1].strip()
-
-    return raspuns_curat.strip()
+    try:
+        response = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        if response.status_code == 200:
+            raspuns_brut = response.json()["message"]["content"]
+            return re.sub(
+                r"<think>.*?</think>", "", raspuns_brut, flags=re.DOTALL
+            ).strip()
+        return "⚠️ Eroare la generarea raportului AI."
+    except Exception as e:
+        return f"⚠️ Eroare conexiune Ollama: {e}"
 
 
-if __name__ == "__main__":
-    text_test = "Laborator: SYNEVO. Glicemie: 126 mg/dL. TGO: 45 U/L."
-    print(ruleaza_analiza_clinica(999, text_test))
+def normalizeaza_termen_medical(termen_brut: str) -> str:
+    print(f"[🤖] Standardizăm termenul medical: {termen_brut}...")
+
+    # Am eliminat mențiunea negativă despre <think> care îl deruta și am impus un output strict
+    prompt = f"""
+    Ești un medic expert în terminologia clinică.
+    Standardizează afecțiunea pacientului într-un singur diagnostic medical oficial, concis, în limba română.
+    
+    Exemple de normalizare:
+    - "diabet tip 2" -> "Diabet Zaharat Tip 2"
+    - "tensiune mare" -> "Hipertensiune Arterială"
+    - "RACEALA" -> "Infecție de tract respirator superior"
+    - "durere de cap" -> "Cefalee"
+    - "colesterol marit" -> "Hipercolesterolemie"
+    
+    Termen introdus de pacient: "{termen_brut}"
+    
+    REGULI STRICTE: 
+    1. Returnează STRICT numele oficial al afecțiunii pe un singur rând.
+    2. Fără alte explicații, introduceri, pași de gândire sau punct la final.
+    3. Doar diagnosticul, capitalizat corect.
+    """
+
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Ești un API de normalizare. Răspunzi doar cu diagnosticul standardizat, nimic altceva.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "stream": False,
+        "options": {
+            "temperature": 0.0  # Setăm temperatura la absolut zero pentru a opri halucinațiile
+        },
+    }
+
+    try:
+        response = requests.post(OLLAMA_URL, json=payload, timeout=30)
+        if response.status_code == 200:
+            raspuns_brut = response.json()["message"]["content"]
+
+            # --- NOUA LOGICĂ INFAILIBILĂ DE CURĂȚARE ---
+            # 1. Dacă a pus ambele tag-uri, luăm ce e DUPĂ tag-ul de închidere
+            if "</think>" in raspuns_brut:
+                raspuns_curat = raspuns_brut.split("</think>")[-1]
+            # 2. Dacă a deschis tag-ul dar a uitat să îl închidă (eroarea ta curentă), luăm doar ultima linie de text!
+            elif "<think>" in raspuns_brut:
+                linii = [
+                    linie.strip() for linie in raspuns_brut.split("\n") if linie.strip()
+                ]
+                raspuns_curat = linii[-1] if linii else termen_brut
+            else:
+                raspuns_curat = raspuns_brut
+
+            # 3. Curățare finală de caractere și cuvinte parazit adăugate de model ("Yes.", "Da.")
+            raspuns_curat = re.sub(
+                r"^(Yes\.|Da\.|Answer:)\s*",
+                "",
+                raspuns_curat.strip(),
+                flags=re.IGNORECASE,
+            )
+            raspuns_curat = raspuns_curat.strip("'\". \n\t")
+
+            # 4. Fallback de siguranță: dacă rezultatul e prea lung (a eșuat complet), returnăm termenul original
+            if not raspuns_curat or len(raspuns_curat) > 50:
+                return termen_brut.strip().capitalize()
+
+            return raspuns_curat
+        else:
+            return termen_brut.strip().capitalize()
+    except Exception as e:
+        print(f"[❌] Eroare la normalizarea AI: {e}")
+        return termen_brut.strip().capitalize()

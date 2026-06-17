@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.frontend.interfata import hash_password, verify_password
+from src.frontend.views.autentificare import hash_password, verify_password
 
 
 def test_hashing_parola():

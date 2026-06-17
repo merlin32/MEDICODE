@@ -11,6 +11,9 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from src.backend.db.db_connection import DatabaseConnection  # noqa: E402
+from src.backend.agents.clinical_analyzer import (  # noqa: E402
+    normalizeaza_termen_medical,
+)  # noqa: E402
 
 
 def get_db_connection():
@@ -38,6 +41,44 @@ with col_u1:
 with col_u2:
     st.write(f"**Sex Biologic:** {current_user.get('sex', '')}")
     st.write(f"**Data Nașterii:** {current_user.get('data_nasterii', '')}")
+
+st.markdown("---")
+st.subheader("🔑 Configurare Motor AI (Gemini)")
+
+cheie_curenta = st.session_state.current_user.get("cheie_api_gemini")
+
+if not cheie_curenta:
+    st.info("💡 **Ai nevoie de o cheie API pentru a analiza analizele medicale.**")
+    with st.expander("📖 Cum obțin cheia API (Tutorial)", expanded=True):
+        st.markdown("""
+        1. Accesează [Google AI Studio](https://aistudio.google.com/app/apikey).
+        2. Loghează-te cu contul tău Google (sau creează unul dacă nu ai).
+        3. Apasă pe **Create API key**.
+        4. Copiază cheia și introdu-o în caseta de mai jos.
+        """)
+else:
+    st.success("✅ Cheia API este configurată și pregătită pentru analiză.")
+
+with st.form("form_api_key"):
+    noua_cheie = st.text_input(
+        "Introdu cheia API:",
+        value=cheie_curenta if cheie_curenta else "",
+        type="password",
+    )
+    if st.form_submit_button("Salvează Cheia API"):
+        if noua_cheie.strip():
+            conn = DatabaseConnection().connection
+            conn.execute(
+                "UPDATE Utilizatori SET cheie_api_gemini = ? WHERE id_utilizator = ?",
+                (noua_cheie.strip(), st.session_state.current_user_id),
+            )
+            conn.commit()
+            st.session_state.current_user["cheie_api_gemini"] = noua_cheie.strip()
+            st.success("✅ Cheia a fost salvată!")
+            st.rerun()
+        else:
+            st.error("Introdu o cheie validă.")
+
 
 st.markdown("---")
 st.markdown("### 🩺 Dosarul Meu de Afecțiuni")
@@ -101,32 +142,40 @@ with st.expander("➕ Înregistrează o afecțiune nouă în istoric"):
             "Insuficiență cardiacă cronică",
         ],
         "Afecțiuni Metabolice și Endocrine": [
-            "Diabet zaharat (Tip 1 și Tip 2)",
-            "Obezitate / Sindrom metabolic",
-            "Boli tiroidiene (Hipotiroidism / Hipertiroidism)",
+            "Diabet zaharat (Tip 1)",
+            "Diabet zaharat (Tip 2)",
+            "Obezitate",
+            "Sindrom metabolic",
+            "Hipotiroidism",
+            "Hipertiroidism",
         ],
         "Afecțiuni Respiratorii": [
             "Astm bronșic",
             "Boală pulmonară obstructivă cronică (BPOC)",
         ],
         "Afecțiuni Neurologice și Psihice": [
-            "Boala Alzheimer și alte demențe",
+            "Boala Alzheimer",
             "Boala Parkinson",
             "Scleroză multiplă",
             "Epilepsie",
-            "Tulburări depresive și de anxietate",
+            "Tulburări de anxietate",
+            "Tulburări depresive",
         ],
         "Afecțiuni Oncologice": [
             "Cancer pulmonar",
             "Cancer colorectal",
-            "Cancer mamar / de prostată",
+            "Cancer mamar",
+            "Cancer de prostată",
         ],
         "Afecțiuni Hepatice și Gastrointestinale": [
-            "Hepatite virale cronice (B, C, D)",
+            "Hepatita B",
+            "Hepatita C",
+            "Hepatita D",
             "Ciroză hepatică",
         ],
         "Afecțiuni Reumatologice și Osoase": [
-            "Poliartrită reumatoidă și artrită psoriazică",
+            "Poliartrită reumatoidă",
+            "Artrită psoriazică",
             "Osteoporoză",
             "Spondilită anchilozantă",
         ],
@@ -137,7 +186,7 @@ with st.expander("➕ Înregistrează o afecțiune nouă în istoric"):
         "Alte Afecțiuni Cronice": [
             "Boală cronică de rinichi (Insuficiență renală)",
             "Glaucom",
-            "Afecțiuni stomatologice cronice (ex. Parodontoză)",
+            "Parodontoză",
         ],
     }
 
@@ -182,33 +231,43 @@ with st.expander("➕ Înregistrează o afecțiune nouă în istoric"):
             st.error("Vă rugăm să selectați statusul clinic.")
         else:
             nume_af_curat = nume_afectiune_final.strip()
-            if nume_af_curat:
-                exista_deja = conn.execute(
-                    "SELECT status FROM Utilizator_Afectiune WHERE id_utilizator = ? AND nume_afectiune = ?",
-                    (id_user, nume_af_curat),
-                ).fetchone()
+            # (Presupunând că variabila ta se numește nume_af_curat)
+        if nume_af_curat:
+            # 1. Trecem termenul prin AI pentru standardizare (Afișăm spinner vizual pacientului)
+            with st.spinner(
+                "🧠 AI-ul standardizează diagnosticul în terminologia medicală..."
+            ):
+                nume_af_curat = normalizeaza_termen_medical(nume_af_curat)
 
-                if exista_deja and exista_deja["status"] == stare_af:
-                    st.error(
-                        f"Afecțiunea '{nume_af_curat}' figurează deja cu statusul '{stare_af}'!"
+            # 2. Verificăm în baza de date (cu numele gata normalizat)
+            exista_deja = conn.execute(
+                "SELECT status FROM Utilizator_Afectiune WHERE id_utilizator = ? AND nume_afectiune = ?",
+                (id_user, nume_af_curat),
+            ).fetchone()
+
+            if exista_deja and exista_deja["status"] == stare_af:
+                st.error(
+                    f"Afecțiunea '{nume_af_curat}' figurează deja cu statusul '{stare_af}'!"
+                )
+            else:
+                # 3. Inserăm în tabelul catalog (Afectiuni) dacă e boală nouă
+                conn.execute(
+                    "INSERT OR IGNORE INTO Afectiuni (nume_afectiune) VALUES (?)",
+                    [nume_af_curat],
+                )
+                # 4. Facem legătura pacient-boală
+                if exista_deja:
+                    conn.execute(
+                        "UPDATE Utilizator_Afectiune SET status = ? WHERE id_utilizator = ? AND nume_afectiune = ?",
+                        (stare_af, id_user, nume_af_curat),
                     )
                 else:
                     conn.execute(
-                        "INSERT OR IGNORE INTO Afectiuni (nume_afectiune) VALUES (?)",
-                        [nume_af_curat],
+                        "INSERT INTO Utilizator_Afectiune (id_utilizator, nume_afectiune, status) VALUES (?, ?, ?)",
+                        (id_user, nume_af_curat, stare_af),
                     )
-                    if exista_deja:
-                        conn.execute(
-                            "UPDATE Utilizator_Afectiune SET status = ? WHERE id_utilizator = ? AND nume_afectiune = ?",
-                            (stare_af, id_user, nume_af_curat),
-                        )
-                    else:
-                        conn.execute(
-                            "INSERT INTO Utilizator_Afectiune (id_utilizator, nume_afectiune, status) VALUES (?, ?, ?)",
-                            (id_user, nume_af_curat, stare_af),
-                        )
-                    conn.commit()
-                    st.success(f"Afecțiunea '{nume_af_curat}' a fost salvată!")
-                    st.rerun()
-            else:
-                st.error("Numele afecțiunii nu poate fi lăsat gol.")
+                conn.commit()
+                st.success(f"Afecțiunea '{nume_af_curat}' a fost adăugată la dosar!")
+                st.rerun()
+        else:
+            st.error("Numele afecțiunii nu poate fi lăsat gol.")

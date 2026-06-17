@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import pytest
 import sqlite3
-from src.frontend.interfata import register_user
+from src.frontend.views.autentificare import register_user
 
 
 # Suprascriem conexiunea la BD pentru teste ca să folosească memoria RAM
@@ -24,7 +24,9 @@ def mock_db_connection(monkeypatch):
         return conn
 
     # Păcălim aplicația să folosească BD-ul fals
-    monkeypatch.setattr("src.frontend.interfata.get_db_connection", fake_connection)
+    monkeypatch.setattr(
+        "src.frontend.views.autentificare.get_db_connection", fake_connection
+    )
 
 
 def test_inregistrare_utilizator_nou():

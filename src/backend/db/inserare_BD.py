@@ -174,17 +174,22 @@ def proceseaza_si_salveaza_buletin(
         raise Exception(f"Eroare la inserarea în baza de date: {e}")
 
 
-def finalizeaza_analiza(id_sesiune):
+def finalizeaza_analiza(id_sesiune, raport_text=None):
     db = DatabaseConnection()
     conn = db.connection
-    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     try:
-        cursor.execute(
-            "UPDATE Analize SET finalizata = 1 WHERE id_sesiune = ?",
-            (id_sesiune,),
-        )
+        if raport_text:
+            cursor.execute(
+                "UPDATE Analize SET finalizata = 1, raport_text = ? WHERE id_sesiune = ?",
+                (raport_text, id_sesiune),
+            )
+        else:
+            cursor.execute(
+                "UPDATE Analize SET finalizata = 1 WHERE id_sesiune = ?",
+                (id_sesiune,),
+            )
         conn.commit()
         return True
     except Exception as e:

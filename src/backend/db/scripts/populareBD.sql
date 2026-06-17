@@ -5,12 +5,3 @@ INSERT INTO Afectiuni (nume_afectiune, descriere_generala) VALUES
 ('Steatoză Hepatică', 'Cunoscută și sub numele de ficat gras, reprezintă acumularea excesivă de grăsimi (trigliceride) în celulele hepatice, adesea asociată cu obezitatea și sindromul metabolic.'),
 ('Anemie Feriprivă', 'Cel mai frecvent tip de anomalie hematologică, caracterizată prin scăderea numărului de globule roșii și a hemoglobinei din cauza lipsei de fier din organism.'),
 ('Astm Bronșic', 'Boală cronică a căilor respiratorii caracterizată prin inflamație și îngustarea reversibilă a bronhiilor, manifestată prin episoade recurente de wheezing, dispnee și tuse.');
-
-INSERT INTO Clinici (nume_clinica) VALUES
-
-('Regina Maria'),
-('Medlife'),
-('Sanador'),
-('Synevo'),
-('Bioclinica'),
-('Gral Medical');
