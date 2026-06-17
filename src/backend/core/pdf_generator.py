@@ -1,6 +1,6 @@
 import os
 import datetime
-from fpdf import FPDF
+from fpdf import FPDF, XPos, YPos
 
 
 def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
@@ -32,7 +32,6 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
     logo_path = os.path.join(frontend_dir, "assets", "logo.jpeg")
     if os.path.exists(logo_path):
         try:
-            # Încercăm afișarea; dacă eșuează (ex: format corupt), ignorăm discret
             pdf.image(logo_path, x=10, y=5, w=20)
         except Exception:
             pass
@@ -40,11 +39,11 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
     pdf.set_text_color(255, 255, 255)
     pdf.set_font(font_family, "B", 20)
     pdf.set_xy(35, 10)
-    pdf.cell(0, 10, "MEDICODE", ln=False)
+    pdf.cell(0, 10, "MEDICODE", new_x=XPos.RIGHT, new_y=YPos.TOP)
 
     pdf.set_font(font_family, "", 12)
     pdf.set_xy(35, 18)
-    pdf.cell(0, 10, "Raport Medical Generat de Inteligența Artificială", ln=True)
+    pdf.cell(0, 10, "Raport Medical Generat de Inteligența Artificială", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # --- DATE PACIENT ---
     pdf.set_y(35)
@@ -57,20 +56,26 @@ def exporta_raport_pdf_pacient(text_ai, user_data, clinica, data_rec):
     pdf.rect(10, 35, 190, 25, "F")
 
     pdf.set_xy(12, 38)
-    pdf.cell(90, 6, f"Pacient: {nume_pacient}", ln=False)
+    pdf.cell(90, 6, f"Pacient: {nume_pacient}", new_x=XPos.RIGHT, new_y=YPos.TOP)
     pdf.cell(
         90,
         6,
         f"Data Generării: {datetime.date.today().strftime('%d/%m/%Y')}",
-        ln=True,
         align="R",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
     )
 
     pdf.set_x(12)
     pdf.set_font(font_family, "", 11)
-    pdf.cell(90, 6, f"Laborator/Clinică: {clinica}", ln=False)
+    pdf.cell(90, 6, f"Laborator/Clinică: {clinica}", new_x=XPos.RIGHT, new_y=YPos.TOP)
     pdf.cell(
-        90, 6, f"Data Recoltării: {data_rec.strftime('%d/%m/%Y')}", ln=True, align="R"
+        90,
+        6,
+        f"Data Recoltării: {data_rec.strftime('%d/%m/%Y')}",
+        align="R",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
     )
 
     pdf.ln(10)

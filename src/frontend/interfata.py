@@ -5,6 +5,7 @@ import time
 import sys
 import requests
 import streamlit as st
+import threading
 
 os.environ["FLAGS_enable_pir_api"] = "0"
 os.environ["FLAGS_use_mkldnn"] = "0"
@@ -28,37 +29,67 @@ st.set_page_config(page_title="MEDICODE", page_icon="🏥", layout="centered")
 @st.cache_resource(show_spinner=False)
 def initializare_automata_ai_local():
     """Verifică și configurează automat Ollama și modelul MedGemma (Rulează o singură dată)."""
-    if not shutil.which("ollama"):
-        st.error("❌ Serviciul Ollama nu a fost găsit pe acest calculator!")
-        st.info("Te rugăm să descarci și să instalezi Ollama de pe https://ollama.com")
-        st.stop()
 
-    try:
-        requests.get("http://localhost:11434", timeout=2)
-    except requests.exceptions.ConnectionError:
-        with st.spinner("🚀 Pornim serviciul local Ollama în fundal..."):
-            subprocess.Popen(
-                ["ollama", "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            time.sleep(5)
+    def _run():
+        # 1. Check if Ollama is already running
+        ollama_running = False
+        try:
+            requests.get("http://localhost:11434", timeout=2)
+            ollama_running = True
+        except requests.exceptions.ConnectionError:
+            pass
 
-    try:
-        r = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if r.status_code == 200:
-            modele_instalate = [m["name"] for m in r.json().get("models", [])]
-            model_cautat = "hf.co/gguf-org/medgemma-1.5-4b-it-gguf:Q4_0"
-            are_medgemma = any("medgemma" in m.lower() for m in modele_instalate)
+        # 2. Resolve ollama binary path (needed for subprocess calls)
+        ollama_bin = shutil.which("ollama")
+        if not ollama_bin:
+            common_paths = [
+                os.path.expanduser("~\\AppData\\Local\\Programs\\Ollama\\ollama.exe"),
+                os.path.expanduser("~/.local/bin/ollama"),
+                "/usr/local/bin/ollama",
+            ]
+            ollama_bin = next((p for p in common_paths if os.path.isfile(p)), None)
 
-            if not are_medgemma:
-                with st.spinner("📥 Descarcăm modelul medical MedGemma (2.8 GB)..."):
+        # 3. Try to start Ollama if not running
+        if not ollama_running:
+            if not ollama_bin:
+                print("❌ Ollama nu a fost găsit. Instalează de pe https://ollama.com")
+                return
+            try:
+                subprocess.Popen(
+                    [ollama_bin, "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                time.sleep(5)
+            except Exception as e:
+                print(f"Eroare la pornirea Ollama: {e}")
+                return
+
+        # 4. Pull model if not present
+        if not ollama_bin:
+            print("⚠️ Ollama rulează dar nu poate fi apelat prin subprocess (nu e în PATH).")
+            return
+
+        try:
+            r = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if r.status_code == 200:
+                modele_instalate = [m["name"] for m in r.json().get("models", [])]
+                are_medgemma = any("medgemma" in m.lower() for m in modele_instalate)
+                if not are_medgemma:
+                    model_cautat = "hf.co/gguf-org/medgemma-1.5-4b-it-gguf:Q4_0"
+                    print("📥 Descarcăm modelul MedGemma în fundal...")
                     subprocess.run(
-                        ["ollama", "pull", model_cautat], stdout=subprocess.DEVNULL
+                        [ollama_bin, "pull", model_cautat],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
                     )
-    except Exception as e:
-        print(f"Avertisment la inițializarea AI-ului: {e}")
+                    print("✅ MedGemma descărcat cu succes.")
+        except Exception as e:
+            print(f"Avertisment la inițializarea AI-ului: {e}")
 
+    # Run entirely in background — don't block the UI thread
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
 
 initializare_automata_ai_local()
 
