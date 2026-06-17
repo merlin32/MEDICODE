@@ -63,3 +63,34 @@ Aplicația este concepută pentru a fi de tip "Plug & Play", configurându-se au
 4. Sistemul va configura automat mediul și va descărca fișierele necesare, după care platforma se va deschide direct în browser.
 
 *(Notă: Pentru a opri aplicația, trebuie doar să închideți fereastra terminalului pe care scrie "MEDICODE" sau să apăsați tastele `CTRL+C` în interiorul acelui terminal).*
+
+---
+
+## 4. Dezinstalare
+
+Dacă doriți să ștergeți aplicația și să eliberați spațiul ocupat de inteligența artificială (aprox. 3 GB), am pregătit scripturi automate care fac acest lucru în siguranță, fără a vă afecta sistemul de operare.
+
+**Ce fac mai exact aceste scripturi?**
+* 🗑️ Șterg modelul medical AI (MedGemma) din memoria sistemului.
+* 🗑️ Șterg mediul virtual izolat (`.venv`) și toate librăriile Python descărcate.
+* 🛡️ **NU** dezinstalează Python sau Ollama din sistem (deoarece pot fi utile pentru alte aplicații).
+* 🛡️ **NU** șterg baza de date cu istoricul medical (pentru a preveni pierderea accidentală a analizelor).
+
+### 🪟 Pentru utilizatorii de Windows:
+1. Intrați în folderul principal al proiectului.
+2. Dați dublu-click pe fișierul **`Uninstall_Medicode.bat`**.
+3. Sistemul vă va cere o confirmare. Apăsați tasta `Y` (Yes) și apoi `ENTER`.
+4. După ce scriptul afișează mesajul de succes, ați eliberat spațiul! Acum puteți șterge pur și simplu întregul folder `MEDICODE` (click dreapta -> Delete).
+
+### 🍏🐧 Pentru utilizatorii de macOS / Linux:
+1. Deschideți aplicația **Terminal** și navigați către folderul proiectului.
+2. Oferiți permisiunea de rulare scriptului (dacă nu o are deja):
+   ```bash
+   chmod +x Uninstall_Medicode.sh
+   ```
+3. Porniți procesul de curățare tastând:
+   ```bash
+   ./Uninstall_Medicode.sh
+   ```
+4. Confirmați acțiunea apăsând `Y` și `ENTER`. 
+5. După terminarea procesului, puteți șterge manual folderul aplicației în mod obișnuit (Move to Trash).
