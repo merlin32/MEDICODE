@@ -36,61 +36,61 @@ Modul de operare al ecosistemului Medicode este împărțit în trei mari piloni
 
 ---
 
-## 3. Instalare și Rulare (Instrucțiuni pentru Utilizator)
+## 3. Instalare și Rulare Automată (Cross-Platform)
 
-Aplicația este concepută pentru a fi de tip "Plug & Play", configurându-se automat fără a necesita cunoștințe tehnice avansate din partea utilizatorului. 
+Procesul de instalare este complet automatizat prin scripturi inteligente de bootstrapping care asigură o **izolare totală a dependențelor**. Configurația curentă nu modifică și nu corupe versiunile globale de Python existente pe mașina ta de dezvoltare (ex: Python 3.13 / 3.14 fiind protejate complet).
 
-**Pregătire inițială:**
-* Descărcați întregul folder al aplicației pe calculatorul dumneavoastră și dezarhivați-l (dacă este în format ZIP).
-* Asigurați-vă că aveți o conexiune stabilă la internet (necesară doar la prima rulare pentru descărcarea modelelor AI).
+### 🪟 Pentru utilizatorii de Windows (`Start_Medicode.bat`)
 
-### 🪟 Pentru utilizatorii de Windows:
-1. Intrați în folderul principal al proiectului.
-2. Dați dublu-click pe fișierul **`Start_Medicode.bat`**.
-3. **Gata!** La prima rulare, o fereastră neagră va apărea pe ecran și va instala automat tot sistemul (Python, motorul local AI Ollama și va descărca modelul medical securizat MedGemma de 2.8 GB). Acest proces poate dura câteva minute.
-4. Odată finalizat, aplicația MEDICODE se va deschide automat în browserul dumneavoastră web.
+1. Deschideți directorul rădăcină al proiectului `MEDICODE`.
+2. Executați cu dublu-click fișierul **`Start_Medicode.bat`**.
+3. **Fluxul pas cu pas executat în mod automat de către script:**
+   * **Pasul 1 (Verificare Python 3.11):** Verifică existența runtime-ului nativ compatibil Python 3.11. Dacă lipsește sau există o versiune experimentală mai nouă global, scriptul descarcă automat (`curl`) și instalează controlat versiunea corectă folosind parametrul `PrependPath=0` (astfel Python 3.11 rămâne izolat în proiect și nu suprascrie versiunea ta globală).
+   * **Pasul 2 (Verificare Ollama):** Detectează dacă motorul AI local Ollama este instalat în sistem. În caz contrar, realizează descărcarea și instalarea automată.
+   * **Pasul 3 (Inițializare Mediu Virtual):** Inițializează un mediu virtual local `.venv` asociat strict cu interpretorul Python 3.11, prevenind coliziunile globale.
+   * **Pasul 4 (Instalare Dependențe):** Actualizează managerul de pachete `pip` în mod silențios, instalează automat motorul OCR local (`paddlepaddle` cu flag-ul `--prefer-binary` pentru a elimina cerința de compilatoare C++ externe sau erori GCC) și restul librăriilor menționate în `requirements.txt`.
+   * **Pasul 5 (Pull Model AI):** Verifică în registrul Ollama prezența modelului medical calibrat `medgemma-1.5-4b-it-gguf:Q4_0`. Dacă acesta nu este stocat local, inițiază descărcarea automată (2.8 GB).
+4. Aplicația va porni automat serverul local Streamlit și va deschide interfața securizată direct în browser la adresa `http://localhost:8501`.
 
-### 🍏🐧 Pentru utilizatorii de macOS / Linux:
-1. Deschideți aplicația **Terminal** și navigați către folderul principal al proiectului (ex: `cd /Calea/Catre/Medicode`).
-2. Oferiți permisiunea de rulare a scriptului de instalare tastând această comandă (necesar doar o singură dată):
-```bash
+### 🍏🐧 Pentru utilizatorii de macOS / Linux (`Start_Medicode.sh`)
+
+1. Deschideți o instanță de Terminal în folderul proiectului.
+2. Acordați permisiuni de execuție scriptului shell:
+   ```bash
    chmod +x Start_Medicode.sh
-   ```
-3. Porniți aplicația tastând:
-```bash
+3. Lansați executabilul:
+   ```bash
    ./Start_Medicode.sh
-   ```
-4. Sistemul va configura automat mediul și va descărca fișierele necesare, după care platforma se va deschide direct în browser.
+4. Scriptul Unix va asigura detectarea automată a aplicației și componentelor Ollama, crearea spațiului .venv și pornirea instanței web Streamlit.
 
-*(Notă: Pentru a opri aplicația, trebuie doar să închideți fereastra terminalului pe care scrie "MEDICODE" sau să apăsați tastele `CTRL+C` în interiorul acelui terminal).*
+*(Notă: Pentru a opri aplicația, închideți fereastra terminalului sau apăsați tastele CTRL+C în interiorul acestuia.)*
+## 4. Dezinstalare și Curățare Completă (Wizard Interactiv)
 
----
+Pentru a asigura o mentenanță riguroasă a spațiului de stocare local și a dependențelor de sistem, platforma integrează scripturi avansate de eliminare granulară controlată.
 
-## 4. Dezinstalare
+### 🪟 Pentru utilizatorii de Windows (`Uninstall_Medicode.bat`)
 
-Dacă doriți să ștergeți aplicația și să eliberați spațiul ocupat de inteligența artificială (aprox. 3 GB), am pregătit scripturi automate care fac acest lucru în siguranță, fără a vă afecta sistemul de operare.
+Executarea fișierului deschide un utilitar securizat tip Wizard care funcționează pe baza unui principiu non-destructiv implicit, solicitând decizii explicite (`Y/N`) din partea utilizatorului pentru fiecare tip de date în parte:
 
-**Ce fac mai exact aceste scripturi?**
-* 🗑️ Șterg modelul medical AI (MedGemma) din memoria sistemului.
-* 🗑️ Șterg mediul virtual izolat (`.venv`) și toate librăriile Python descărcate.
-* 🛡️ **NU** dezinstalează Python sau Ollama din sistem (deoarece pot fi utile pentru alte aplicații).
-* 🛡️ **NU** șterg baza de date cu istoricul medical (pentru a preveni pierderea accidentală a analizelor).
+1. **Opțiunea 1: Ștergerea fișierelor aplicației (.venv) și a modelului AI**
+   * Șterge folderul local `.venv` cu toate bibliotecile atașate.
+   * Apelează API-ul Ollama pentru a elimina definitiv modelul medical local (`medgemma`), eliberând instantaneu ~2.8 GB pe disc.
+2. **Opțiunea 2: Ștergerea bazei de date locale (MEDICODE.db)**
+   * Elimină complet directorul de stocare `data/database/`, curățând în siguranță istoricul analizelor medicale, datele pacientului și tabelele relaționale. Păstrarea bazei de date este recomandată implicit dacă doriți doar să actualizați codul aplicației fără a pierde istoricul clinic.
+3. **Opțiunea 3: Dezinstalarea motorului AI Ollama**
+   * Închide în siguranță procesele active din fundal (`ollama.exe`, `ollama app.exe`) pentru a evita blocarea fișierelor la ștergere.
+   * Rulează un algoritm de detecție multi-cale (verifică Registry, AppData, Program Files și utilizează utilitarul nativ Microsoft `winget`) pentru a lansa dezinstalarea automată silențioasă a instanței Ollama globale de pe mașină.
+4. **Opțiunea 4: Dezinstalarea Python 3.11**
+   * Identifică ID-ul pachetului izolat Python 3.11 prin intermediul `winget` și realizează eliminarea sa curată din sistem, lăsând versiunile tale principale de dezvoltare (ex: Python 3.14) complet neatinse și perfect funcționale.
 
-### 🪟 Pentru utilizatorii de Windows:
-1. Intrați în folderul principal al proiectului.
-2. Dați dublu-click pe fișierul **`Uninstall_Medicode.bat`**.
-3. Sistemul vă va cere o confirmare. Apăsați tasta `Y` (Yes) și apoi `ENTER`.
-4. După ce scriptul afișează mesajul de succes, ați eliberat spațiul! Acum puteți șterge pur și simplu întregul folder `MEDICODE` (click dreapta -> Delete).
+### 🍏🐧 Pentru utilizatorii de macOS / Linux (`Uninstall_Medicode.sh`)
 
-### 🍏🐧 Pentru utilizatorii de macOS / Linux:
-1. Deschideți aplicația **Terminal** și navigați către folderul proiectului.
-2. Oferiți permisiunea de rulare scriptului (dacă nu o are deja):
+1. Deschideți un terminal în folderul rădăcină al aplicației.
+2. Oferiți drepturi de rulare utilitarului Unix cleanup:
    ```bash
    chmod +x Uninstall_Medicode.sh
-   ```
-3. Porniți procesul de curățare tastând:
+3. Porniți procesul de curățare executând:
    ```bash
    ./Uninstall_Medicode.sh
-   ```
-4. Confirmați acțiunea apăsând `Y` și `ENTER`. 
+4. Scriptul va opri execuția proceselor legate de aplicație, va elimina modular structura folderului virtual izolat .venv, va elibera cache-ul local și va șterge modelul medical stocat în Ollama, ghidându-vă interactiv prin pașii pe care doriți să îi confirmați.
 5. După terminarea procesului, puteți șterge manual folderul aplicației în mod obișnuit (Move to Trash).
