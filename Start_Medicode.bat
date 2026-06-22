@@ -2,59 +2,75 @@
 TITLE MEDICODE - Auto-Installer ^& Launcher
 color 0B
 
-echo     Pornire Sistem MEDICODE (Diagnostic AI)
+REM Ne asiguram ca scriptul ruleaza strict din folderul proiectului
+cd /d "%~dp0"
+
+echo     Pornire Sistem MEDICODE - Diagnostic AI
 echo.
 
-python --version >nul 2>&1
+echo [PAS 1/5] Verificam versiunea corecta de Python 3.11...
+py -3.11 --version >nul 2>&1
 IF %ERRORLEVEL% NEQ 0 (
     color 0E
-    echo [PAS 1/5] Python nu a fost gasit. Il descarcam si instalam automat...
-    echo Te rugam sa astepti, poate dura 1-2 minute. Nu inchide fereastra!
-    powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe' -OutFile 'python_installer.exe'"
-    start /wait python_installer.exe /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
-    del python_installer.exe
+    echo   -^> Python 3.11 nu a fost gasit.
+    echo   -^> Il instalam in paralel, fara sa stricam versiunile actuale...
+    curl -L "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe" -o "python_installer.exe"
     
-    echo.
-    echo [SUCCES] Python a fost instalat! Este necesar un restart rapid al ferestrei.
-    echo Te rog sa inchizi aceasta fereastra si sa dai DUBLU-CLICK din nou pe Start_Medicode.bat
-    pause
-    exit /b
+    REM PrependPath=0 asigura ca Python 3.11 NU suprascrie versiunea principala a sistemului!
+    start /wait python_installer.exe /quiet InstallAllUsers=0 PrependPath=0 Include_test=0
+    del python_installer.exe
+    echo   -^> [SUCCES] Python 3.11 a fost instalat izolat!
+) ELSE (
+    echo   -^> Python 3.11 este disponibil pe sistem.
 )
 
+echo.
+echo [PAS 2/5] Verificam motorul AI Ollama...
 ollama --version >nul 2>&1
 IF %ERRORLEVEL% NEQ 0 (
     color 0E
-    echo [PAS 2/5] Motorul AI nu a fost gasit. Il descarcam si instalam...
-    powershell -Command "Invoke-WebRequest -Uri 'https://ollama.com/download/OllamaSetup.exe' -OutFile 'OllamaSetup.exe'"
+    echo   -^> Ollama nu a fost gasit. Il descarcam si instalam...
+    curl -L "https://ollama.com/download/OllamaSetup.exe" -o "OllamaSetup.exe"
     start /wait OllamaSetup.exe /S
     del OllamaSetup.exe
-    echo [SUCCES] Ollama a fost instalat!
+    echo   -^> [SUCCES] Ollama a fost instalat!
+) ELSE (
+    echo   -^> Ollama este deja instalat.
 )
 
+echo.
+echo [PAS 3/5] Verificam mediul virtual izolat...
 IF NOT EXIST ".venv\Scripts\activate.bat" (
-    echo [PAS 3/5] Cream mediul izolat pentru aplicatie...
-    python -m venv .venv
+    echo   -^> Cream mediul izolat STRICT cu Python 3.11...
+    py -3.11 -m venv .venv
+) ELSE (
+    echo   -^> Mediul virtual exista deja.
 )
 
 call .venv\Scripts\activate.bat
 
+echo.
 echo [PAS 4/5] Verificam si instalam librariile necesare...
-echo Acest proces poate dura 1-2 minute, te rugam sa astepti.
 python -m pip install --upgrade pip --quiet
-pip install -r requirements.txt --quiet
+echo   -^> Instalam motorul OCR Paddle...
+python -m pip install paddlepaddle --prefer-binary --quiet
+echo   -^> Instalam restul dependentelor, poate dura un minut...
+python -m pip install -r requirements.txt --prefer-binary --quiet
 
-echo [PAS 5/5] Verificam inteligenta artificiala medicala MedGemma...
-echo Daca este prima data, va descarca modelul si vei vedea progresul mai jos:
-ollama pull hf.co/gguf-org/medgemma-1.5-4b-it-gguf:Q4_0
+echo.
+echo [PAS 5/5] Verificam inteligenta artificiala MedGemma...
+ollama list | findstr "medgemma-1.5-4b-it-gguf:Q4_0" >nul
+IF %ERRORLEVEL% NEQ 0 (
+    echo   -^> Descarcam modelul medical de 2.8 GB...
+    ollama pull hf.co/gguf-org/medgemma-1.5-4b-it-gguf:Q4_0
+) ELSE (
+    echo   -^> Modelul MedGemma este deja descarcat si pregatit!
+)
 
+echo.
 color 0A
-echo.
-echo     Toate sistemele sunt functionale!
-echo     Lansam platforma MEDICODE in browser...
-echo.
-echo Apasa CTRL+C in aceasta fereastra cand vrei sa opresti aplicatia.
-echo.
-
+echo =========================================================
+echo      Sistemul este pregatit! Pornim platforma...
+echo =========================================================
 streamlit run src/frontend/interfata.py
-
 pause

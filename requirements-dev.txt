@@ -1,6 +1,7 @@
 hypothesis==6.152.4
 numpy==1.26.4
 paddleocr==2.8.1
+paddlepaddle==2.6.2
 pandas==3.0.2
 pypdfium2==5.7.1
 pytest-cov
@@ -9,10 +10,8 @@ ruff
 black
 streamlit==1.58.0
 streamlit-cookies-controller==0.0.4
-paddlepaddle==2.6.2
 fpdf2==2.8.7
 requests
 pdfplumber
 opencv-python
 Pillow
-pypdfium2==5.7.1

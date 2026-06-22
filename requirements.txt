@@ -4,10 +4,8 @@ pandas>=2.0.0
 pypdfium2==5.7.1
 streamlit==1.58.0
 streamlit-cookies-controller==0.0.4
-paddlepaddle==2.6.2
 fpdf2==2.8.7
 requests
 pdfplumber
 opencv-python
 Pillow
-pypdfium2==5.7.1
